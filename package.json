@@ -1,7 +1,7 @@
 {
-	"name": "obsidian-sample-plugin",
+	"name": "obsidian-dropbox-connect",
 	"version": "1.0.0",
-	"description": "This is a sample plugin for Obsidian (https://obsidian.md)",
+	"description": "A plugin to sync obsidian with dropbox",
 	"main": "main.js",
 	"scripts": {
 		"dev": "node esbuild.config.mjs",
