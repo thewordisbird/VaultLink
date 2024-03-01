@@ -1,5 +1,6 @@
-import { App, PluginSettingTab } from "obsidian";
+import { App, Setting, PluginSettingTab } from "obsidian";
 import ObsidianDropboxConnect from "./main";
+import { PubSub } from "./pubsub";
 
 export interface PluginSettings {}
 
@@ -11,9 +12,15 @@ export class SettingsTab extends PluginSettingTab {
 	constructor(app: App, plugin: ObsidianDropboxConnect) {
 		super(app, plugin);
 		this.plugin = plugin;
+
+		// Register pubsub subscriptions
+		const pubsub = new PubSub();
+		pubsub.subscribe("authorization-success", () => {
+			console.log("pubsub works!");
+		});
 	}
 
-	display(): void {
+	display() {
 		const { containerEl } = this;
 
 		containerEl.empty();
@@ -27,48 +34,12 @@ export class SettingsTab extends PluginSettingTab {
 			text: "Author: Justin Bird",
 		});
 
-		const spacer = containerEl.createEl("div");
-		spacer.style.width = "100%";
-		spacer.style.height = "24px";
-		spacer.style.margin = "0";
-
-		const content = containerEl.createEl("main");
-		content.style.display = "flex";
-		content.style.flexDirection = "column";
-		content.style.gap = "24px";
-
-		const connectDropboxButton = content.createEl("button", {
-			text: "Connect Dropbox",
+		new Setting(containerEl).addButton((componenet) => {
+			const button = componenet.buttonEl;
+			button.setText("Connect To Dropbox");
+			button.onClickEvent(() =>
+				this.plugin.dropboxProvider.authorizeDropbox(),
+			);
 		});
-		connectDropboxButton.onClickEvent(
-			this.plugin.dropboxProvider.authorizeDropbox,
-		);
-		connectDropboxButton.style.background = "#3984FF";
-		connectDropboxButton.style.borderRadius = "unset";
-		connectDropboxButton.style.color = "#1E1919";
-		connectDropboxButton.style.fontSize = "16px";
-		connectDropboxButton.style.fontWeight = "600";
-
-		const fetchFileInfoButton = content.createEl("button", {
-			text: "Fetch File Info",
-		});
-		fetchFileInfoButton.onClickEvent(
-			this.plugin.dropboxProvider.fetchFileInfo,
-		);
-		fetchFileInfoButton.style.borderColor = "blue";
-		fetchFileInfoButton.style.borderRadius = "unset";
-
-		// new Setting(containerEl)
-		// 	.setName("Setting #1")
-		// 	.setDesc("It's a secret")
-		// 	.addText((text) =>
-		// 		text
-		// 			.setPlaceholder("Enter your secret")
-		// 			.setValue(this.plugin.settings.mySetting)
-		// 			.onChange(async (value) => {
-		// 				this.plugin.settings.mySetting = value;
-		// 				await this.plugin.saveSettings();
-		// 			}),
-		// 	);
 	}
 }
