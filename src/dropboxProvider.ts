@@ -4,6 +4,10 @@ import { ObsidianProtocolData } from "obsidian";
 const REDIRECT_URI = "obsidian://connect-dropbox";
 const CLIENT_ID = "vofawt4jgywrgey";
 
+// const dropboxAuth = new DropboxAuth({
+// 	clientId: CLIENT_ID,
+// });
+
 export class DropboxProvider {
 	dropboxAuth: DropboxAuth;
 
@@ -13,8 +17,9 @@ export class DropboxProvider {
 		});
 	}
 
-	authorizeDropbox() {
-		this.dropboxAuth
+	authorizeDropbox(): Promise<void> {
+		console.log("this", this);
+		return this.dropboxAuth
 			.getAuthenticationUrl(
 				REDIRECT_URI, // redirectUri
 				undefined, // state
@@ -37,6 +42,7 @@ export class DropboxProvider {
 
 	getAccessToken(protocolData: ObsidianProtocolData) {
 		const { code } = protocolData;
+		console.log("getAccessToken, code:", code);
 
 		if (!code) throw new Error("Authorization Error: Code Not Available");
 		const codeVerifier = window.sessionStorage.getItem("codeVerifier");
