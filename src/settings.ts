@@ -17,6 +17,8 @@ export class SettingsTab extends PluginSettingTab {
 		const pubsub = new PubSub();
 		pubsub.subscribe("authorization-success", () => {
 			console.log("pubsub works!");
+			const dropboxButton = document.getElementById("dbx-btn");
+			dropboxButton?.hide();
 		});
 	}
 
@@ -37,6 +39,7 @@ export class SettingsTab extends PluginSettingTab {
 		new Setting(containerEl).addButton((componenet) => {
 			const button = componenet.buttonEl;
 			button.setText("Connect To Dropbox");
+			button.id = "dbx-btn";
 			button.onClickEvent(() =>
 				this.plugin.dropboxProvider.authorizeDropbox(),
 			);
