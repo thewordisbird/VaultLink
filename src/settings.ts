@@ -17,8 +17,8 @@ export class SettingsTab extends PluginSettingTab {
 		const pubsub = new PubSub();
 		pubsub.subscribe("authorization-success", () => {
 			console.log("pubsub works!");
-			const dropboxButton = document.getElementById("dbx-btn");
-			dropboxButton?.hide();
+			document.getElementById("connect-container")!.hide();
+			document.getElementById("disconnect-container")!.show();
 		});
 	}
 
@@ -36,13 +36,32 @@ export class SettingsTab extends PluginSettingTab {
 			text: "Author: Justin Bird",
 		});
 
-		new Setting(containerEl).addButton((componenet) => {
-			const button = componenet.buttonEl;
-			button.setText("Connect To Dropbox");
-			button.id = "dbx-btn";
-			button.onClickEvent(() =>
-				this.plugin.dropboxProvider.authorizeDropbox(),
-			);
-		});
+		const connectContainer = containerEl.createEl("section");
+		connectContainer.className = "connect_container";
+		connectContainer.id = "connect_container";
+
+		const connectDropboxButton = connectContainer.createEl("button");
+		connectDropboxButton.innerText = "Connect To Dropbox";
+		connectDropboxButton.className = "dropbox_button";
+		connectDropboxButton.onClickEvent(() =>
+			this.plugin.dropboxProvider.authorizeDropbox(),
+		);
+
+		const disconnectContainer = containerEl.createEl("section");
+		disconnectContainer.className = "disconnect_container";
+		disconnectContainer.id = "disconnect_container";
+
+		const connectionInfo = disconnectContainer.createEl("div");
+		connectionInfo.innerHTML = `<p>Connected to dropbox as <span class="dropbox_user_label"> justin.h.bird@gmail.com</p>`;
+
+		const disconnectButton = disconnectContainer.createEl("button");
+		disconnectButton.setText("Disconnect From Dropbox");
+		disconnectButton.className = "dropbox_button";
+		disconnectButton.id = "dbx-btn";
+		disconnectButton.onClickEvent(() =>
+			this.plugin.dropboxProvider.authorizeDropbox(),
+		);
+
+		disconnectContainer.show();
 	}
 }
