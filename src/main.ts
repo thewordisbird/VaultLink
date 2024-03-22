@@ -1,32 +1,38 @@
-import {
-	App,
-	Editor,
-	MarkdownView,
-	Modal,
-	Notice,
-	Plugin,
-	PluginSettingTab,
-	Setting,
-} from "obsidian";
+import { Plugin } from "obsidian";
+import { DEFAULT_SETTINGS, SettingsTab } from "./settings";
+import { DropboxProvider } from "./dropboxProvider";
+import type { PluginSettings } from "./settings";
+import { PubSub } from "./pubsub";
 
-// Remember to rename these classes and interfaces!
-
-interface MyPluginSettings {
-	mySetting: string;
-}
-
-const DEFAULT_SETTINGS: MyPluginSettings = {
-	mySetting: "default",
-};
-
-export default class MyPlugin extends Plugin {
-	settings: MyPluginSettings;
+export default class ObsidianDropboxConnect extends Plugin {
+	settings: PluginSettings;
+	dropboxProvider: DropboxProvider;
 
 	async onload() {
 		await this.loadSettings();
+		const settingsTab = new SettingsTab(this.app, this);
+
+		const pubsub = new PubSub();
+
+		// Setup Dropbox Provider
+		this.dropboxProvider = new DropboxProvider();
+
+		// Retrieve and set new access token if a valid refresh token is stored in local storage
+		this.dropboxProvider.authorizeWithRefreshToken();
+
+		// Set  protocol handler to catch authorization response form dropbox
+		this.registerObsidianProtocolHandler(
+			"connect-dropbox",
+			(protocolData) => {
+				this.dropboxProvider.getAccessToken(protocolData).then(() => {
+					this.dropboxProvider.getUserInfo();
+				});
+				pubsub.publish("authorization-success");
+			},
+		);
 
 		// This adds a settings tab so the user can configure various aspects of the plugin
-		this.addSettingTab(new SampleSettingTab(this.app, this));
+		this.addSettingTab(settingsTab);
 	}
 
 	onunload() {}
@@ -41,33 +47,5 @@ export default class MyPlugin extends Plugin {
 
 	async saveSettings() {
 		await this.saveData(this.settings);
-	}
-}
-
-class SampleSettingTab extends PluginSettingTab {
-	plugin: MyPlugin;
-
-	constructor(app: App, plugin: MyPlugin) {
-		super(app, plugin);
-		this.plugin = plugin;
-	}
-
-	display(): void {
-		const { containerEl } = this;
-
-		containerEl.empty();
-
-		new Setting(containerEl)
-			.setName("Setting #1")
-			.setDesc("It's a secret")
-			.addText((text) =>
-				text
-					.setPlaceholder("Enter your secret")
-					.setValue(this.plugin.settings.mySetting)
-					.onChange(async (value) => {
-						this.plugin.settings.mySetting = value;
-						await this.plugin.saveSettings();
-					}),
-			);
 	}
 }

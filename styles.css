@@ -6,3 +6,48 @@ available in the app when your plugin is enabled.
 If your plugin does not need CSS, delete this file.
 
 */
+
+.theme-dark {
+	--dropbox_core_primary: #f7f5f2;
+	--dropbox_inverse_core_secondary: #1e1919;
+	--dropbox_inverse_core_accent: #3984ff;
+}
+
+.theme-light {
+	--dropbox_core_primary: #1e1919;
+	--dropbox_core_secondary: #f7f5f2;
+	--dropbox_core_accent: #0061fe;
+}
+
+.settings_section {
+	display: flex;
+	flex-direction: column;
+	justify-content: center;
+	align-items: center;
+	border-bottom: 1px solid;
+	width: 100%;
+	height: 96px;
+}
+
+button.dropbox_button {
+	background-color: #3984ff;
+	color: #1e1919;
+	font-size: 16px;
+	line-height: 20px;
+	font-weight: 600;
+	border-radius: 0;
+
+	&:hover {
+		opacity: 0.8;
+	}
+}
+
+.disconnect_container {
+}
+
+.dropbox_user_label {
+	font-size: 16px;
+	line-height: 20px;
+	font-weight: 600;
+	color: #f7f5f2;
+}
