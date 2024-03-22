@@ -123,7 +123,7 @@ export class DropboxProvider {
 			.catch((error) => console.error(error));
 	}
 
-	getUserInfo(): Promise<void | DropboxResponse<users.FullAccount>> {
+	getUserInfo(): Promise<void> {
 		const dropbox = new Dropbox({
 			auth: this.dropboxAuth,
 		});
