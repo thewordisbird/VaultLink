@@ -1,4 +1,4 @@
-import { Dropbox, DropboxAuth, DropboxResponse, files, users } from "dropbox";
+import { Dropbox, DropboxAuth, DropboxResponse, files } from "dropbox";
 import { ObsidianProtocolData } from "obsidian";
 
 type DropboxAccount = {
