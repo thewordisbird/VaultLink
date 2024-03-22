@@ -16,13 +16,17 @@ export class SettingsTab extends PluginSettingTab {
 		// Register pubsub subscriptions
 		const pubsub = new PubSub();
 		pubsub.subscribe("authorization-success", () => {
-			console.log("pubsub works!");
-			document.getElementById("connect-container")!.hide();
-			document.getElementById("disconnect-container")!.show();
+			document.getElementById("connect_container")!.hide();
+			document.getElementById("disconnect_container")!.show();
 		});
 	}
 
-	display() {
+	async display() {
+		/* Everytime the setting tab is loaded check for auth? */
+		const authState =
+			await this.plugin.dropboxProvider.getAuthorizationState();
+		console.log("dropbox authorization state:", authState);
+
 		const { containerEl } = this;
 
 		containerEl.empty();
@@ -36,32 +40,41 @@ export class SettingsTab extends PluginSettingTab {
 			text: "Author: Justin Bird",
 		});
 
-		const connectContainer = containerEl.createEl("section");
-		connectContainer.className = "connect_container";
-		connectContainer.id = "connect_container";
+		const cloudConnectSection = containerEl.createEl("section");
+		cloudConnectSection.className = "settings_section";
+		cloudConnectSection.id = "connect_container";
 
-		const connectDropboxButton = connectContainer.createEl("button");
+		const connectDropboxButton = cloudConnectSection.createEl("button");
 		connectDropboxButton.innerText = "Connect To Dropbox";
 		connectDropboxButton.className = "dropbox_button";
 		connectDropboxButton.onClickEvent(() =>
-			this.plugin.dropboxProvider.authorizeDropbox(),
+			this.plugin.dropboxProvider.getAuthorizationToken(),
 		);
 
-		const disconnectContainer = containerEl.createEl("section");
-		disconnectContainer.className = "disconnect_container";
-		disconnectContainer.id = "disconnect_container";
+		const cloudDisconnectSection = containerEl.createEl("section");
+		cloudDisconnectSection.className = "settings_section";
+		cloudDisconnectSection.id = "disconnect_container";
 
-		const connectionInfo = disconnectContainer.createEl("div");
+		const connectionInfo = cloudDisconnectSection.createEl("div");
 		connectionInfo.innerHTML = `<p>Connected to dropbox as <span class="dropbox_user_label"> justin.h.bird@gmail.com</p>`;
 
-		const disconnectButton = disconnectContainer.createEl("button");
+		const disconnectButton = cloudDisconnectSection.createEl("button");
 		disconnectButton.setText("Disconnect From Dropbox");
 		disconnectButton.className = "dropbox_button";
 		disconnectButton.id = "dbx-btn";
 		disconnectButton.onClickEvent(() =>
-			this.plugin.dropboxProvider.authorizeDropbox(),
+			this.plugin.dropboxProvider.revokeAuthorizationToken().then(() => {
+				cloudDisconnectSection.hide();
+				cloudConnectSection.show();
+			}),
 		);
 
-		disconnectContainer.show();
+		if (authState) {
+			cloudConnectSection.hide();
+			cloudDisconnectSection.show();
+		} else {
+			cloudConnectSection.show();
+			cloudDisconnectSection.hide();
+		}
 	}
 }

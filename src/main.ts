@@ -4,8 +4,6 @@ import { DropboxProvider } from "./dropboxProvider";
 import type { PluginSettings } from "./settings";
 import { PubSub } from "./pubsub";
 
-// TODO: create dropbox class
-
 export default class ObsidianDropboxConnect extends Plugin {
 	settings: PluginSettings;
 	dropboxProvider: DropboxProvider;
@@ -19,11 +17,16 @@ export default class ObsidianDropboxConnect extends Plugin {
 		// Setup Dropbox Provider
 		this.dropboxProvider = new DropboxProvider();
 
+		// Retrieve and set new access token if a valid refresh token is stored in local storage
+		this.dropboxProvider.authorizeWithRefreshToken();
+
+		// Set  protocol handler to catch authorization response form dropbox
 		this.registerObsidianProtocolHandler(
 			"connect-dropbox",
 			(protocolData) => {
-				this.dropboxProvider.getAccessToken(protocolData);
-
+				this.dropboxProvider.getAccessToken(protocolData).then(() => {
+					this.dropboxProvider.getUserInfo();
+				});
 				pubsub.publish("authorization-success");
 			},
 		);

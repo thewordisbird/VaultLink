@@ -1,24 +1,35 @@
-import { Dropbox, DropboxAuth, DropboxResponse } from "dropbox";
+import { Dropbox, DropboxAuth, DropboxResponse, files, users } from "dropbox";
 import { ObsidianProtocolData } from "obsidian";
+
+type DropboxAccount = {
+	accountId: string;
+	email: string;
+};
+
+type DropboxState = {
+	account: DropboxAccount;
+};
 
 const REDIRECT_URI = "obsidian://connect-dropbox";
 const CLIENT_ID = "vofawt4jgywrgey";
 
-// const dropboxAuth = new DropboxAuth({
-// 	clientId: CLIENT_ID,
-// });
-
 export class DropboxProvider {
+	dropbox: Dropbox;
 	dropboxAuth: DropboxAuth;
+	state = {} as DropboxState;
 
 	constructor() {
 		this.dropboxAuth = new DropboxAuth({
 			clientId: CLIENT_ID,
 		});
+
+		this.dropbox = new Dropbox({
+			auth: this.dropboxAuth,
+		});
 	}
 
-	authorizeDropbox(): Promise<void> {
-		console.log("this", this);
+	/* Start Authentication and Authorization */
+	getAuthorizationToken(): Promise<void> {
 		return this.dropboxAuth
 			.getAuthenticationUrl(
 				REDIRECT_URI, // redirectUri
@@ -40,11 +51,11 @@ export class DropboxProvider {
 			.catch((error) => console.error(error));
 	}
 
-	getAccessToken(protocolData: ObsidianProtocolData) {
+	getAccessToken(protocolData: ObsidianProtocolData): Promise<void> {
 		const { code } = protocolData;
-		console.log("getAccessToken, code:", code);
 
 		if (!code) throw new Error("Authorization Error: Code Not Available");
+
 		const codeVerifier = window.sessionStorage.getItem("codeVerifier");
 		if (!codeVerifier) {
 			throw new Error("Authorization Error: Code Verifier Not Available");
@@ -52,7 +63,7 @@ export class DropboxProvider {
 
 		this.dropboxAuth.setCodeVerifier(codeVerifier);
 
-		this.dropboxAuth
+		return this.dropboxAuth
 			.getAccessTokenFromCode(REDIRECT_URI, code)
 			.then(
 				(
@@ -64,26 +75,63 @@ export class DropboxProvider {
 					this.dropboxAuth.setAccessToken(
 						response.result.access_token,
 					);
+
 					this.dropboxAuth.setRefreshToken(
+						response.result.refresh_token,
+					);
+
+					// Store Refresh token in local storage for persistant authorization
+					localStorage.setItem(
+						"dropboxRefreshToken",
 						response.result.refresh_token,
 					);
 				},
 			)
-			.catch((error) => {
-				throw new Error(`Authorization Error: ${error} `);
-			});
+			.catch((error) => console.error(error));
 	}
 
-	fetchFileInfo() {
-		const dropbox = new Dropbox({
-			auth: this.dropboxAuth,
-		});
-		dropbox
+	revokeAuthorizationToken(): Promise<void> {
+		return this.dropbox
+			.authTokenRevoke()
+			.then(() => {
+				localStorage.removeItem("dropboxRefreshToken");
+			})
+			.catch((error) => console.error(error));
+	}
+
+	authorizeWithRefreshToken(): void {
+		const refreshToken = localStorage.getItem("dropboxRefreshToken");
+		if (!refreshToken) return;
+
+		this.dropboxAuth.setRefreshToken(refreshToken);
+		this.dropboxAuth.refreshAccessToken();
+	}
+
+	getAuthorizationState(): Promise<boolean> {
+		return this.dropbox
+			.checkUser({})
+			.then(() => true)
+			.catch(() => false);
+	}
+	/* End Authentication and Authorization */
+
+	fetchFileInfo(): Promise<void | DropboxResponse<files.ListFolderResult>> {
+		return this.dropbox
 			.filesListFolder({
 				path: "",
 			})
-			.then((response) => {
-				console.log("Access Response Data", response.result.entries);
-			});
+			.catch((error) => console.error(error));
+	}
+
+	getUserInfo(): Promise<void | DropboxResponse<users.FullAccount>> {
+		const dropbox = new Dropbox({
+			auth: this.dropboxAuth,
+		});
+		return dropbox.usersGetCurrentAccount().then((response) => {
+			this.state.account = {
+				accountId: response.result.account_id,
+				email: response.result.email,
+			};
+		});
 	}
 }
