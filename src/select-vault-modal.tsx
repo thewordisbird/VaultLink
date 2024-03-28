@@ -4,14 +4,18 @@ import { App, Modal } from "obsidian";
 import { files } from "dropbox";
 import type { DropboxResponse } from "dropbox";
 import type ObsidianDropboxConnect from "./main";
+import { PubSub } from "./pubsub";
 
 export class VaultSelectModal extends Modal {
 	plugin: ObsidianDropboxConnect;
 	root: Root | null = null;
+	pubsub: PubSub;
 
 	constructor(app: App, plugin: ObsidianDropboxConnect) {
 		super(app);
 		this.plugin = plugin;
+
+		this.pubsub = new PubSub();
 	}
 
 	async onOpen() {
@@ -19,13 +23,21 @@ export class VaultSelectModal extends Modal {
 			this.plugin.dropboxProvider,
 		);
 
+		const setVaultInSettings = (path: string) => {
+			this.pubsub.publish("set-vault-path", { payload: path });
+			this.close();
+		};
+
 		const rootElm = this.contentEl.createEl("div");
 		rootElm.id = "react-root";
 
 		this.root = createRoot(rootElm);
 		this.root.render(
 			<StrictMode>
-				<FolderExplorer listFolders={listFolders} />
+				<FolderExplorer
+					listFolders={listFolders}
+					setVaultInSettings={setVaultInSettings}
+				/>
 			</StrictMode>,
 		);
 	}
@@ -39,11 +51,13 @@ interface FolderExplorerProps {
 	listFolders: (
 		args: files.ListFolderArg,
 	) => Promise<void | DropboxResponse<files.ListFolderResult>>;
+	setVaultInSettings: (path: string) => void;
 	initialPath?: string;
 }
 
 const FolderExplorer: React.FC<FolderExplorerProps> = ({
 	listFolders,
+	setVaultInSettings,
 	initialPath,
 }) => {
 	const [path, setPath] = useState<string[]>(() =>
@@ -71,7 +85,10 @@ const FolderExplorer: React.FC<FolderExplorerProps> = ({
 
 	return (
 		<div>
-			<TableControl path={path.join("/")} />
+			<TableControl
+				path={path.join("/")}
+				setVaultInSettings={setVaultInSettings}
+			/>
 			<TableBreadcrumb path={path} setPath={setPath} />
 			<h2>
 				{path[path.length - 1] === ""
@@ -85,9 +102,17 @@ const FolderExplorer: React.FC<FolderExplorerProps> = ({
 
 interface ModalHeaderProps {
 	path: string;
+	setVaultInSettings: (path: string) => void;
 }
 
-const TableControl: React.FC<ModalHeaderProps> = ({ path }) => {
+const TableControl: React.FC<ModalHeaderProps> = ({
+	path,
+	setVaultInSettings,
+}) => {
+	function handleSelectVault(e): React.MouseEventHandler<HTMLButtonElement> {
+		setVaultInSettings(path);
+	}
+
 	return (
 		<div
 			style={{
@@ -99,7 +124,9 @@ const TableControl: React.FC<ModalHeaderProps> = ({ path }) => {
 			<h1>Select Vault</h1>
 			<div>
 				<button>Add folder</button>
-				<button>Select vault</button>
+				<button onClick={(e) => handleSelectVault(e)}>
+					Select vault
+				</button>
 			</div>
 		</div>
 	);

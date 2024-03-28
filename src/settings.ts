@@ -23,6 +23,19 @@ export class SettingsTab extends PluginSettingTab {
 			document.getElementById("connect_container")!.hide();
 			document.getElementById("disconnect_container")!.show();
 		});
+
+		pubsub.subscribe(
+			"set-vault-path",
+			async (args: { payload: string }) => {
+				const { payload } = args;
+				this.plugin.settings.cloudVaultPath = payload;
+				await this.plugin.saveSettings();
+				const vaultPathInput = document.getElementById(
+					"vault_path_input",
+				) as HTMLInputElement;
+				vaultPathInput.value = payload;
+			},
+		);
 	}
 
 	async display() {
@@ -79,11 +92,20 @@ export class SettingsTab extends PluginSettingTab {
 		new Setting(cloudDisconnectSection)
 			.setName("Dropbox Vault Path")
 			.setDesc("Select a folder in your Dropbox to sync with Obsidian")
+			.addText((text) =>
+				text
+					.setValue(this.plugin.settings.cloudVaultPath || "")
+					.setDisabled(true),
+			)
 			.addButton((button) =>
 				button.setButtonText("Select Folder").onClick(() => {
 					new VaultSelectModal(this.app, this.plugin).open();
 				}),
-			);
+			)
+			.then((setting) => {
+				setting.controlEl.children[0].id = "vault_path_input";
+			});
+
 		if (authState) {
 			cloudConnectSection.hide();
 			cloudDisconnectSection.show();
