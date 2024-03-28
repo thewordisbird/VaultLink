@@ -1,10 +1,14 @@
 import { App, Setting, PluginSettingTab } from "obsidian";
 import ObsidianDropboxConnect from "./main";
 import { PubSub } from "./pubsub";
+import { VaultSelectModal } from "./select-vault-modal";
 
-export interface PluginSettings {}
+export interface PluginSettings {
+	provider?: "dropbox";
+	cloudVaultPath?: string;
+}
 
-export const DEFAULT_SETTINGS: PluginSettings = {};
+export const DEFAULT_SETTINGS: Partial<PluginSettings> = {};
 
 export class SettingsTab extends PluginSettingTab {
 	plugin: ObsidianDropboxConnect;
@@ -69,6 +73,17 @@ export class SettingsTab extends PluginSettingTab {
 			}),
 		);
 
+		// Add dropboxVaultPath setting
+
+		// Display path and a button to launch the selectVaultModal
+		new Setting(cloudDisconnectSection)
+			.setName("Dropbox Vault Path")
+			.setDesc("Select a folder in your Dropbox to sync with Obsidian")
+			.addButton((button) =>
+				button.setButtonText("Select Folder").onClick(() => {
+					new VaultSelectModal(this.app, this.plugin).open();
+				}),
+			);
 		if (authState) {
 			cloudConnectSection.hide();
 			cloudDisconnectSection.show();
