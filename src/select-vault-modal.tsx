@@ -118,7 +118,10 @@ const TableBreadcrumb: React.FC<TableBreadcrumbProps> = ({ path, setPath }) => {
 			{path.slice(0, path.length - 1).map((dir, idx, arr) => {
 				if (dir === "") return null;
 				return (
-					<TextLink onClick={() => setPath(arr.slice(0, idx + 1))}>
+					<TextLink
+						key={arr.slice(0, idx + 1).join("/")}
+						onClick={() => setPath(arr.slice(0, idx + 1))}
+					>
 						{dir}
 					</TextLink>
 				);
@@ -150,20 +153,25 @@ const TableBody: React.FC<TableBodyProps> = ({ folders, setPath }) => {
 
 	return (
 		<table>
-			<tr>
-				<th>name</th>
-				<th>count: {folders.length}</th>
-			</tr>
-
-			{folders.map((folder) => (
-				<tr key={(folder as any).id}>
-					<td
-						onClick={() => setPath(folder.path_display!.split("/"))}
-					>
-						{folder.name}
-					</td>
+			<thead>
+				<tr>
+					<th>name</th>
+					<th>count: {folders.length}</th>
 				</tr>
-			))}
+			</thead>
+			<tbody>
+				{folders.map((folder) => (
+					<tr key={(folder as any).id}>
+						<td
+							onClick={() =>
+								setPath(folder.path_display!.split("/"))
+							}
+						>
+							{folder.name}
+						</td>
+					</tr>
+				))}
+			</tbody>
 		</table>
 	);
 };
