@@ -35,6 +35,7 @@ export class VaultSelectModal extends Modal {
 		this.root.render(
 			<StrictMode>
 				<FolderExplorer
+					currentPath={this.plugin.settings.cloudVaultPath}
 					listFolders={listFolders}
 					setVaultInSettings={setVaultInSettings}
 				/>
@@ -52,16 +53,16 @@ interface FolderExplorerProps {
 		args: files.ListFolderArg,
 	) => Promise<void | DropboxResponse<files.ListFolderResult>>;
 	setVaultInSettings: (path: string) => void;
-	initialPath?: string;
+	currentPath: string | undefined;
 }
 
 const FolderExplorer: React.FC<FolderExplorerProps> = ({
 	listFolders,
 	setVaultInSettings,
-	initialPath,
+	currentPath,
 }) => {
 	const [path, setPath] = useState<string[]>(() =>
-		!initialPath ? [""] : initialPath.split("/"),
+		!currentPath ? [""] : currentPath.split("/"),
 	);
 	const [folders, setFolders] =
 		useState<
