@@ -115,11 +115,11 @@ export class DropboxProvider {
 	}
 	/* End Authentication and Authorization */
 
-	fetchFileInfo(): Promise<void | DropboxResponse<files.ListFolderResult>> {
+	listFolders(
+		args: files.ListFolderArg,
+	): Promise<void | DropboxResponse<files.ListFolderResult>> {
 		return this.dropbox
-			.filesListFolder({
-				path: "",
-			})
+			.filesListFolder(args)
 			.catch((error) => console.error(error));
 	}
 
