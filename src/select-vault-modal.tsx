@@ -46,7 +46,9 @@ const FolderExplorer: React.FC<FolderExplorerProps> = ({
 	listFolders,
 	initialPath,
 }) => {
-	const [path, setPath] = useState<string>(initialPath || "");
+	const [path, setPath] = useState<string[]>(() =>
+		!initialPath ? [""] : initialPath.split("/"),
+	);
 	const [folders, setFolders] =
 		useState<
 			(
@@ -57,11 +59,9 @@ const FolderExplorer: React.FC<FolderExplorerProps> = ({
 		>();
 
 	useEffect(() => {
-		console.log("calling listFolders");
-		listFolders({ path }).then((res) => {
+		listFolders({ path: path.join("/") }).then((res) => {
 			if (res) {
-				const entries = res.result.entries;
-				const folders = entries.filter(
+				const folders = res.result.entries.filter(
 					(entry) => entry[".tag"] === "folder",
 				);
 				setFolders(folders);
@@ -71,7 +71,13 @@ const FolderExplorer: React.FC<FolderExplorerProps> = ({
 
 	return (
 		<div>
-			<TableControl path={path} />
+			<TableControl path={path.join("/")} />
+			<TableBreadcrumb path={path} setPath={setPath} />
+			<h2>
+				{path[path.length - 1] === ""
+					? "All folders"
+					: path[path.length - 1]}
+			</h2>
 			<TableBody folders={folders} setPath={setPath} />
 		</div>
 	);
@@ -90,7 +96,7 @@ const TableControl: React.FC<ModalHeaderProps> = ({ path }) => {
 				justifyContent: "space-between",
 			}}
 		>
-			<VaultPath path={path} />
+			<h1>Select Vault</h1>
 			<div>
 				<button>Add folder</button>
 				<button>Select vault</button>
@@ -99,12 +105,34 @@ const TableControl: React.FC<ModalHeaderProps> = ({ path }) => {
 	);
 };
 
-interface VaultPathProps {
-	path: string;
+interface TableBreadcrumbProps {
+	path: string[];
+	setPath: React.Dispatch<React.SetStateAction<string[]>>;
 }
 
-const VaultPath: React.FC<VaultPathProps> = ({ path }) => {
-	return <h4>Vault Path: {path}</h4>;
+const TableBreadcrumb: React.FC<TableBreadcrumbProps> = ({ path, setPath }) => {
+	if (path.length === 1) return null;
+	return (
+		<div>
+			<TextLink onClick={() => setPath([""])}>All folders</TextLink>
+			{path.slice(0, path.length - 1).map((dir, idx, arr) => {
+				if (dir === "") return null;
+				return (
+					<TextLink onClick={() => setPath(arr.slice(0, idx + 1))}>
+						{dir}
+					</TextLink>
+				);
+			})}
+		</div>
+	);
+};
+
+interface TextLinkProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
+	children: string;
+}
+
+const TextLink: React.FC<TextLinkProps> = ({ children, ...props }) => {
+	return <button onClick={props.onClick}>{children}</button>;
 };
 
 interface TableBodyProps {
@@ -115,7 +143,7 @@ interface TableBodyProps {
 				| files.DeletedMetadataReference
 		  )[]
 		| undefined;
-	setPath: React.Dispatch<React.SetStateAction<string>>;
+	setPath: React.Dispatch<React.SetStateAction<string[]>>;
 }
 const TableBody: React.FC<TableBodyProps> = ({ folders, setPath }) => {
 	if (!folders) return null;
@@ -129,7 +157,9 @@ const TableBody: React.FC<TableBodyProps> = ({ folders, setPath }) => {
 
 			{folders.map((folder) => (
 				<tr key={(folder as any).id}>
-					<td onClick={() => setPath(folder.path_lower!)}>
+					<td
+						onClick={() => setPath(folder.path_display!.split("/"))}
+					>
 						{folder.name}
 					</td>
 				</tr>
