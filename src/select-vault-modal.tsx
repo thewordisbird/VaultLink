@@ -21,7 +21,11 @@ export class VaultSelectModal extends Modal {
 	async onOpen() {
 		const listFolders = this.plugin.dropboxProvider.listFolders.bind(
 			this.plugin.dropboxProvider,
-		);
+		) as typeof this.plugin.dropboxProvider.listFolders;
+
+		const addFolder = this.plugin.dropboxProvider.addFolder.bind(
+			this.plugin.dropboxProvider,
+		) as typeof this.plugin.dropboxProvider.addFolder;
 
 		const setVaultInSettings = (path: string) => {
 			this.pubsub.publish("set-vault-path", { payload: path });
@@ -38,6 +42,7 @@ export class VaultSelectModal extends Modal {
 					currentPath={this.plugin.settings.cloudVaultPath}
 					listFolders={listFolders}
 					setVaultInSettings={setVaultInSettings}
+					addFolder={addFolder}
 				/>
 			</StrictMode>,
 		);
@@ -54,12 +59,16 @@ interface FolderExplorerProps {
 	) => Promise<void | DropboxResponse<files.ListFolderResult>>;
 	setVaultInSettings: (path: string) => void;
 	currentPath: string | undefined;
+	addFolder: (
+		path: string,
+	) => Promise<DropboxResponse<files.CreateFolderResult>>;
 }
 
 const FolderExplorer: React.FC<FolderExplorerProps> = ({
 	listFolders,
 	setVaultInSettings,
 	currentPath,
+	addFolder,
 }) => {
 	const [path, setPath] = useState<string[]>(() =>
 		!currentPath ? [""] : currentPath.split("/"),
@@ -73,6 +82,8 @@ const FolderExplorer: React.FC<FolderExplorerProps> = ({
 			)[]
 		>();
 
+	const [displayAddFolderInput, setDisplayAddFolderInput] = useState(false);
+
 	useEffect(() => {
 		listFolders({ path: path.join("/") }).then((res) => {
 			if (res) {
@@ -84,18 +95,26 @@ const FolderExplorer: React.FC<FolderExplorerProps> = ({
 		});
 	}, [path]);
 
+	function handleToggleAddFolderInput() {
+		setDisplayAddFolderInput((cur) => !cur);
+	}
+
 	return (
 		<div>
 			<TableControl
 				path={path.join("/")}
 				setVaultInSettings={setVaultInSettings}
+				handleToggleAddFolderInput={handleToggleAddFolderInput}
+				disableControl={displayAddFolderInput}
 			/>
 			<TableBreadcrumb path={path} setPath={setPath} />
-			<h2>
-				{path[path.length - 1] === ""
-					? "All folders"
-					: path[path.length - 1]}
-			</h2>
+			<TableCurrentLocation
+				path={path}
+				setPath={setPath}
+				addFolder={addFolder}
+				dispalyAddFolderInput={displayAddFolderInput}
+				setDisplayAddFolderInput={setDisplayAddFolderInput}
+			/>
 			<TableBody folders={folders} setPath={setPath} />
 		</div>
 	);
@@ -104,15 +123,28 @@ const FolderExplorer: React.FC<FolderExplorerProps> = ({
 interface ModalHeaderProps {
 	path: string;
 	setVaultInSettings: (path: string) => void;
+	handleToggleAddFolderInput: () => void;
+	// addFolder: (
+	// 	path: string,
+	// ) => Promise<DropboxResponse<files.CreateFolderResult>>;
+	disableControl: boolean;
 }
 
 const TableControl: React.FC<ModalHeaderProps> = ({
 	path,
 	setVaultInSettings,
+	handleToggleAddFolderInput,
+	disableControl,
 }) => {
-	function handleSelectVault(e): React.MouseEventHandler<HTMLButtonElement> {
+	function handleSelectVault(_e: React.MouseEvent<HTMLButtonElement>): void {
 		setVaultInSettings(path);
 	}
+
+	// function handleAddFolder(_e: React.MouseEvent<HTMLButtonElement>): void {
+	// 	addFolder(`${path}/obsidian_connect`).then((res) =>
+	// 		console.log("addFolder res:", res),
+	// 	);
+	// }
 
 	return (
 		<div
@@ -124,8 +156,13 @@ const TableControl: React.FC<ModalHeaderProps> = ({
 		>
 			<h1>Select Vault</h1>
 			<div>
-				<button>Add folder</button>
-				<button onClick={(e) => handleSelectVault(e)}>
+				<button
+					disabled={disableControl}
+					onClick={handleToggleAddFolderInput}
+				>
+					Add folder
+				</button>
+				<button disabled={disableControl} onClick={handleSelectVault}>
 					Select vault
 				</button>
 			</div>
@@ -154,6 +191,61 @@ const TableBreadcrumb: React.FC<TableBreadcrumbProps> = ({ path, setPath }) => {
 					</TextLink>
 				);
 			})}
+		</div>
+	);
+};
+
+interface TableCurrentLocationProps {
+	path: string[];
+	setPath: React.Dispatch<React.SetStateAction<string[]>>;
+	addFolder: (
+		path: string,
+	) => Promise<DropboxResponse<files.CreateFolderResult>>;
+	dispalyAddFolderInput: boolean;
+	setDisplayAddFolderInput: React.Dispatch<React.SetStateAction<boolean>>;
+}
+
+const TableCurrentLocation: React.FC<TableCurrentLocationProps> = ({
+	path,
+	setPath,
+	addFolder,
+	dispalyAddFolderInput,
+	setDisplayAddFolderInput,
+}) => {
+	const [folderName, setFolderName] = useState("");
+
+	function handleOnInput(e: React.ChangeEvent<HTMLInputElement>) {
+		console.log("new Folder name:", e.target.value);
+		setFolderName(e.target.value);
+	}
+
+	function handleAddFolder(_e: React.MouseEvent<HTMLButtonElement>): void {
+		addFolder(`${path}/${folderName}`).then((res) => {
+			setDisplayAddFolderInput(false);
+			setPath([...path, folderName]);
+			console.log("addFolder res:", res);
+		});
+	}
+
+	return (
+		<div style={{ display: "flex", flexDirection: "row" }}>
+			<h2>
+				{`${
+					path[path.length - 1] === ""
+						? "All folders"
+						: path[path.length - 1]
+				}${dispalyAddFolderInput ? "/" : ""}`}
+			</h2>
+
+			{dispalyAddFolderInput ? (
+				<div>
+					<input type="text" onChange={handleOnInput} />
+					<button onClick={handleAddFolder}>Save</button>
+					<button onClick={() => setDisplayAddFolderInput(false)}>
+						Cancel
+					</button>
+				</div>
+			) : null}
 		</div>
 	);
 };

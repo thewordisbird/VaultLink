@@ -123,6 +123,12 @@ export class DropboxProvider {
 			.catch((error) => console.error(error));
 	}
 
+	addFolder(
+		path: string,
+	): Promise<DropboxResponse<files.CreateFolderResult>> {
+		return this.dropbox.filesCreateFolderV2({ path });
+	}
+
 	getUserInfo(): Promise<void> {
 		const dropbox = new Dropbox({
 			auth: this.dropboxAuth,
