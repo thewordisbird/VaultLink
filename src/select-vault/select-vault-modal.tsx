@@ -1,17 +1,10 @@
-import {
-	StrictMode,
-	useState,
-	useEffect,
-	useContext,
-	useReducer,
-	createContext,
-} from "react";
-import { Root, createRoot } from "react-dom/client";
 import { App, Modal } from "obsidian";
-import { files } from "dropbox";
-import type { DropboxResponse } from "dropbox";
+import { Root, createRoot } from "react-dom/client";
+import { StrictMode, useState } from "react";
+
 import type ObsidianDropboxConnect from "../main";
 import { PubSub } from "../pubsub";
+import { SelectVaultProvider, useSelectVault } from "./context-provider";
 
 export class VaultSelectModal extends Modal {
 	plugin: ObsidianDropboxConnect;
@@ -21,11 +14,11 @@ export class VaultSelectModal extends Modal {
 	constructor(app: App, plugin: ObsidianDropboxConnect) {
 		super(app);
 		this.plugin = plugin;
-
 		this.pubsub = new PubSub();
 	}
 
 	async onOpen() {
+		/* TODO: The dropbox provider should be a singleton so these can be called where needed */
 		const listFolders = this.plugin.dropboxProvider.listFolders.bind(
 			this.plugin.dropboxProvider,
 		) as typeof this.plugin.dropboxProvider.listFolders;
@@ -38,6 +31,7 @@ export class VaultSelectModal extends Modal {
 			this.pubsub.publish("set-vault-path", { payload: path });
 			this.close();
 		};
+		/* END TODO */
 
 		const rootElm = this.contentEl.createEl("div");
 		rootElm.id = "react-root";
@@ -51,11 +45,10 @@ export class VaultSelectModal extends Modal {
 					addFolder={addFolder}
 					setVaultInSettings={setVaultInSettings}
 				>
-					<FolderExplorer
-						currentPath={this.plugin.settings.cloudVaultPath}
-						setVaultInSettings={setVaultInSettings}
-						addFolder={addFolder}
-					/>
+					<TableControl />
+					<TableBreadcrumb />
+					<TableCurrentLocation />
+					<TableBody />
 				</SelectVaultProvider>
 			</StrictMode>,
 		);
@@ -66,183 +59,8 @@ export class VaultSelectModal extends Modal {
 	}
 }
 
-type SelectVaultContextType = {
-	folders: (
-		| files.FileMetadataReference
-		| files.FolderMetadataReference
-		| files.DeletedMetadataReference
-	)[];
-};
-const SelectVaultContext = createContext<SelectVaultContextType | undefined>(
-	undefined,
-);
-
-type State = {
-	path: string[];
-	folders: (
-		| files.FileMetadataReference
-		| files.FolderMetadataReference
-		| files.DeletedMetadataReference
-	)[];
-	isAddFolderDisplayed: boolean;
-};
-
-type Action =
-	| { type: "SET_VAULT_PATH"; payload: { path: string } }
-	| {
-			type: "SET_FOLDERS";
-			payload: {
-				folders: (
-					| files.FileMetadataReference
-					| files.FolderMetadataReference
-					| files.DeletedMetadataReference
-				)[];
-			};
-	  }
-	| { type: "ADD_FOLDER"; payload: { folderName: string } }
-	| { type: "TOGGLE_ADD_FOLDER" };
-
-const reducer = (state: State, action: Action) => {
-	switch (action.type) {
-		case "SET_VAULT_PATH":
-			break;
-		case "SET_FOLDERS":
-			return {
-				...state,
-				folders: action.payload.folders,
-			};
-		case "ADD_FOLDER":
-			break;
-		case "TOGGLE_ADD_FOLDER":
-			break;
-		default:
-			throw new Error("Reducer Error: Invalid Action");
-	}
-	return state;
-};
-interface SelectVaultProviderProps {
-	currentPath: string | undefined;
-	children: React.ReactNode;
-	listFolders: (
-		args: files.ListFolderArg,
-	) => Promise<void | DropboxResponse<files.ListFolderResult>>;
-	addFolder: (
-		path: string,
-	) => Promise<DropboxResponse<files.CreateFolderResult>>;
-	setVaultInSettings: (path: string) => void;
-}
-
-const SelectVaultProvider: React.FC<SelectVaultProviderProps> = ({
-	children,
-	currentPath,
-	listFolders,
-	// addFolder,
-	// setVaultInSettings,
-}) => {
-	const [state, dispatch] = useReducer(reducer, {
-		path: currentPath ? currentPath.split("/") : [],
-		folders: [],
-		isAddFolderDisplayed: false,
-	});
-
-	useEffect(() => {
-		console.log("state.path:", state.path);
-		listFolders({ path: state.path.join("/") }).then((res) => {
-			if (res) {
-				const folders = res.result.entries.filter(
-					(entry) => entry[".tag"] === "folder",
-				);
-				console.log("folders:", folders);
-				dispatch({
-					type: "SET_FOLDERS",
-					payload: { folders: folders },
-				});
-			}
-		});
-	}, [state.path]);
-
-	return (
-		<SelectVaultContext.Provider value={{ folders: state.folders }}>
-			{children}
-		</SelectVaultContext.Provider>
-	);
-};
-
-const useSelectVault = () => {
-	const context = useContext(SelectVaultContext);
-
-	if (!context) {
-		throw new Error(
-			"useSelectVault must be used in the SelectVaultProvider",
-		);
-	}
-
-	return context;
-};
-
-interface FolderExplorerProps {
-	setVaultInSettings: (path: string) => void;
-	currentPath: string | undefined;
-	addFolder: (
-		path: string,
-	) => Promise<DropboxResponse<files.CreateFolderResult>>;
-}
-
-const FolderExplorer: React.FC<FolderExplorerProps> = ({
-	setVaultInSettings,
-	currentPath,
-	addFolder,
-}) => {
-	const [path, setPath] = useState<string[]>(() =>
-		!currentPath ? [""] : currentPath.split("/"),
-	);
-
-	const [displayAddFolderInput, setDisplayAddFolderInput] = useState(false);
-
-	function handleToggleAddFolderInput() {
-		setDisplayAddFolderInput((cur) => !cur);
-	}
-
-	return (
-		<div>
-			<TableControl
-				path={path.join("/")}
-				setVaultInSettings={setVaultInSettings}
-				handleToggleAddFolderInput={handleToggleAddFolderInput}
-				disableControl={displayAddFolderInput}
-			/>
-			<TableBreadcrumb path={path} setPath={setPath} />
-			<TableCurrentLocation
-				path={path}
-				setPath={setPath}
-				addFolder={addFolder}
-				dispalyAddFolderInput={displayAddFolderInput}
-				setDisplayAddFolderInput={setDisplayAddFolderInput}
-			/>
-			<TableBody setPath={setPath} />
-		</div>
-	);
-};
-
-interface ModalHeaderProps {
-	path: string;
-	setVaultInSettings: (path: string) => void;
-	handleToggleAddFolderInput: () => void;
-	// addFolder: (
-	// 	path: string,
-	// ) => Promise<DropboxResponse<files.CreateFolderResult>>;
-	disableControl: boolean;
-}
-
-const TableControl: React.FC<ModalHeaderProps> = ({
-	path,
-	setVaultInSettings,
-	handleToggleAddFolderInput,
-	disableControl,
-}) => {
-	function handleSelectVault(_e: React.MouseEvent<HTMLButtonElement>): void {
-		setVaultInSettings(path);
-	}
+const TableControl: React.FC = () => {
+	const { state, dispatch, setVaultInSettings } = useSelectVault();
 
 	return (
 		<div
@@ -255,12 +73,15 @@ const TableControl: React.FC<ModalHeaderProps> = ({
 			<h1>Select Vault</h1>
 			<div>
 				<button
-					disabled={disableControl}
-					onClick={handleToggleAddFolderInput}
+					disabled={state.isAddFolderDisplayed}
+					onClick={() => dispatch({ type: "TOGGLE_ADD_FOLDER" })}
 				>
 					Add folder
 				</button>
-				<button disabled={disableControl} onClick={handleSelectVault}>
+				<button
+					disabled={state.isAddFolderDisplayed}
+					onClick={() => setVaultInSettings(state.path.join("/"))}
+				>
 					Select vault
 				</button>
 			</div>
@@ -268,22 +89,27 @@ const TableControl: React.FC<ModalHeaderProps> = ({
 	);
 };
 
-interface TableBreadcrumbProps {
-	path: string[];
-	setPath: React.Dispatch<React.SetStateAction<string[]>>;
-}
+const TableBreadcrumb: React.FC = () => {
+	const { state, dispatch } = useSelectVault();
+	console.log("breadcrumbs", state.path);
+	if (!state.path.length) return null;
 
-const TableBreadcrumb: React.FC<TableBreadcrumbProps> = ({ path, setPath }) => {
-	if (path.length === 1) return null;
 	return (
 		<div>
-			<TextLink onClick={() => setPath([""])}>All folders</TextLink>
-			{path.slice(0, path.length - 1).map((dir, idx, arr) => {
+			<TextLink onClick={() => dispatch({ type: "RESET_VAULT_PATH" })}>
+				All folders
+			</TextLink>
+			{state.path.slice(0, state.path.length - 1).map((dir, idx, arr) => {
 				if (dir === "") return null;
 				return (
 					<TextLink
 						key={arr.slice(0, idx + 1).join("/")}
-						onClick={() => setPath(arr.slice(0, idx + 1))}
+						onClick={() =>
+							dispatch({
+								type: "SET_VAULT_PATH",
+								payload: { path: arr.slice(0, idx + 1) },
+							})
+						}
 					>
 						{dir}
 					</TextLink>
@@ -293,35 +119,17 @@ const TableBreadcrumb: React.FC<TableBreadcrumbProps> = ({ path, setPath }) => {
 	);
 };
 
-interface TableCurrentLocationProps {
-	path: string[];
-	setPath: React.Dispatch<React.SetStateAction<string[]>>;
-	addFolder: (
-		path: string,
-	) => Promise<DropboxResponse<files.CreateFolderResult>>;
-	dispalyAddFolderInput: boolean;
-	setDisplayAddFolderInput: React.Dispatch<React.SetStateAction<boolean>>;
-}
-
-const TableCurrentLocation: React.FC<TableCurrentLocationProps> = ({
-	path,
-	setPath,
-	addFolder,
-	dispalyAddFolderInput,
-	setDisplayAddFolderInput,
-}) => {
+const TableCurrentLocation: React.FC = () => {
 	const [folderName, setFolderName] = useState("");
-
-	function handleOnInput(e: React.ChangeEvent<HTMLInputElement>) {
-		console.log("new Folder name:", e.target.value);
-		setFolderName(e.target.value);
-	}
+	const { state, dispatch, addFolder } = useSelectVault();
 
 	function handleAddFolder(_e: React.MouseEvent<HTMLButtonElement>): void {
-		addFolder(`${path}/${folderName}`).then((res) => {
-			setDisplayAddFolderInput(false);
-			setPath([...path, folderName]);
-			console.log("addFolder res:", res);
+		console.log("handleAddFolder, path, name:", state.path, folderName);
+		const folderPath = state.path.length
+			? `/${state.path.join("/")}/${folderName}`
+			: `/${folderName}`;
+		addFolder(folderPath).then((_res) => {
+			dispatch({ type: "ADD_FOLDER", payload: { folderName } });
 		});
 	}
 
@@ -329,17 +137,22 @@ const TableCurrentLocation: React.FC<TableCurrentLocationProps> = ({
 		<div style={{ display: "flex", flexDirection: "row" }}>
 			<h2>
 				{`${
-					path[path.length - 1] === ""
+					!state.path.length
 						? "All folders"
-						: path[path.length - 1]
-				}${dispalyAddFolderInput ? "/" : ""}`}
+						: state.path[state.path.length - 1]
+				}${state.isAddFolderDisplayed ? "/" : ""}`}
 			</h2>
 
-			{dispalyAddFolderInput ? (
+			{state.isAddFolderDisplayed ? (
 				<div>
-					<input type="text" onChange={handleOnInput} />
+					<input
+						type="text"
+						onChange={(e) => setFolderName(e.target.value)}
+					/>
 					<button onClick={handleAddFolder}>Save</button>
-					<button onClick={() => setDisplayAddFolderInput(false)}>
+					<button
+						onClick={() => dispatch({ type: "TOGGLE_ADD_FOLDER" })}
+					>
 						Cancel
 					</button>
 				</div>
@@ -356,29 +169,30 @@ const TextLink: React.FC<TextLinkProps> = ({ children, ...props }) => {
 	return <button onClick={props.onClick}>{children}</button>;
 };
 
-interface TableBodyProps {
-	setPath: React.Dispatch<React.SetStateAction<string[]>>;
-}
+const TableBody: React.FC = () => {
+	const { state, dispatch } = useSelectVault();
 
-const TableBody: React.FC<TableBodyProps> = ({ setPath }) => {
-	const { folders } = useSelectVault();
-
-	if (!folders) return null;
+	if (!state.folders) return null;
 
 	return (
 		<table>
 			<thead>
 				<tr>
 					<th>name</th>
-					<th>count: {folders.length}</th>
+					<th>count: {state.folders.length}</th>
 				</tr>
 			</thead>
 			<tbody>
-				{folders.map((folder) => (
+				{state.folders.map((folder) => (
 					<tr key={(folder as any).id}>
 						<td
 							onClick={() =>
-								setPath(folder.path_display!.split("/"))
+								dispatch({
+									type: "SET_VAULT_PATH",
+									payload: {
+										path: [...state.path, folder.name],
+									},
+								})
 							}
 						>
 							{folder.name}
