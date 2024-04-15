@@ -53,17 +53,17 @@ button.dropbox_button {
 }
 
 .control-container {
-	display: "flex";
-	flexdirection: "row";
-	justifycontent: "space-between";
-	alignitems: "center";
+	display: flex;
+	flex-direction: row;
+	justify-content: space-between;
+	align-items: center;
 }
 
 .control-btn-container {
-	display: "flex";
-	flexdirection: "row";
-	justifycontent: "flex-end";
-	gap: "8px";
+	display: flex;
+	flex-direction: row;
+	justify-content: flex-end;
+	gap: 8px;
 }
 
 .breadcrumb-slash {
