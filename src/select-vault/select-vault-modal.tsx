@@ -63,15 +63,9 @@ const TableControl: React.FC = () => {
 	const { state, dispatch, setVaultInSettings } = useSelectVault();
 
 	return (
-		<div
-			style={{
-				display: "flex",
-				flexDirection: "row",
-				justifyContent: "space-between",
-			}}
-		>
+		<div className="control-container">
 			<h1>Select Vault</h1>
-			<div>
+			<div className="control-btn-container">
 				<button
 					disabled={state.isAddFolderDisplayed}
 					onClick={() => dispatch({ type: "TOGGLE_ADD_FOLDER" })}
@@ -79,6 +73,7 @@ const TableControl: React.FC = () => {
 					Add folder
 				</button>
 				<button
+					className="mod-cta"
 					disabled={state.isAddFolderDisplayed}
 					onClick={() => setVaultInSettings(state.path.join("/"))}
 				>
@@ -102,17 +97,20 @@ const TableBreadcrumb: React.FC = () => {
 			{state.path.slice(0, state.path.length - 1).map((dir, idx, arr) => {
 				if (dir === "") return null;
 				return (
-					<TextLink
-						key={arr.slice(0, idx + 1).join("/")}
-						onClick={() =>
-							dispatch({
-								type: "SET_VAULT_PATH",
-								payload: { path: arr.slice(0, idx + 1) },
-							})
-						}
-					>
-						{dir}
-					</TextLink>
+					<>
+						<span className="breadcrumb-slash">/</span>
+						<TextLink
+							key={arr.slice(0, idx + 1).join("/")}
+							onClick={() =>
+								dispatch({
+									type: "SET_VAULT_PATH",
+									payload: { path: arr.slice(0, idx + 1) },
+								})
+							}
+						>
+							{dir}
+						</TextLink>
+					</>
 				);
 			})}
 		</div>
@@ -166,7 +164,11 @@ interface TextLinkProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
 }
 
 const TextLink: React.FC<TextLinkProps> = ({ children, ...props }) => {
-	return <button onClick={props.onClick}>{children}</button>;
+	return (
+		<button type="button" className="btn-text-link" onClick={props.onClick}>
+			{children}
+		</button>
+	);
 };
 
 const TableBody: React.FC = () => {
