@@ -66,10 +66,11 @@ button.dropbox_button {
 	gap: 8px;
 }
 
-.breadcrumb-slash {
+.display-slash {
 	padding: var(--size-2-2);
 }
-.btn-text-link {
+
+button.btn-text-link {
 	--interactive-normal: none;
 	--input-shadow: none;
 
@@ -79,5 +80,30 @@ button.dropbox_button {
 		--interactive-hover: none;
 		--input-shadow-hover: none;
 		text-decoration: underline;
+	}
+}
+
+.folder-current-location {
+	width: 100%;
+	display: flex;
+	align-items: center;
+	flex-direction: row;
+}
+
+.add-folder-form {
+	display: flex;
+	flex-grow: 1;
+	flex-direction: row;
+	justify-content: space-between;
+	padding: var(--size-2-2);
+	& input {
+		flex-grow: 1;
+	}
+}
+
+.add-folder-form-control {
+	& button:first-child {
+		margin-left: var(--size-4-4);
+		margin-right: var(--size-4-2);
 	}
 }

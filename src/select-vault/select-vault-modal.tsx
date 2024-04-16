@@ -33,6 +33,7 @@ export class VaultSelectModal extends Modal {
 		};
 		/* END TODO */
 
+		this.contentEl.style.height = "35vh";
 		const rootElm = this.contentEl.createEl("div");
 		rootElm.id = "react-root";
 
@@ -98,7 +99,7 @@ const TableBreadcrumb: React.FC = () => {
 				if (dir === "") return null;
 				return (
 					<>
-						<span className="breadcrumb-slash">/</span>
+						<span className="display-slash">/</span>
 						<TextLink
 							key={arr.slice(0, idx + 1).join("/")}
 							onClick={() =>
@@ -132,27 +133,34 @@ const TableCurrentLocation: React.FC = () => {
 	}
 
 	return (
-		<div style={{ display: "flex", flexDirection: "row" }}>
+		<div className="folder-current-location">
 			<h2>
-				{`${
-					!state.path.length
-						? "All folders"
-						: state.path[state.path.length - 1]
-				}${state.isAddFolderDisplayed ? "/" : ""}`}
+				{!state.path.length
+					? "All folders"
+					: state.path[state.path.length - 1]}
+				{state.isAddFolderDisplayed && (
+					<span className="display-slash"> &#47; </span>
+				)}
 			</h2>
 
 			{state.isAddFolderDisplayed ? (
-				<div>
+				<div className="add-folder-form">
 					<input
 						type="text"
 						onChange={(e) => setFolderName(e.target.value)}
 					/>
-					<button onClick={handleAddFolder}>Save</button>
-					<button
-						onClick={() => dispatch({ type: "TOGGLE_ADD_FOLDER" })}
-					>
-						Cancel
-					</button>
+					<div className="add-folder-form-control">
+						<button className="mod-cta" onClick={handleAddFolder}>
+							Save
+						</button>
+						<button
+							onClick={() =>
+								dispatch({ type: "TOGGLE_ADD_FOLDER" })
+							}
+						>
+							Cancel
+						</button>
+					</div>
 				</div>
 			) : null}
 		</div>
@@ -177,31 +185,33 @@ const TableBody: React.FC = () => {
 	if (!state.folders) return null;
 
 	return (
-		<table>
-			<thead>
-				<tr>
-					<th>name</th>
-					<th>count: {state.folders.length}</th>
-				</tr>
-			</thead>
-			<tbody>
-				{state.folders.map((folder) => (
-					<tr key={(folder as any).id}>
-						<td
-							onClick={() =>
-								dispatch({
-									type: "SET_VAULT_PATH",
-									payload: {
-										path: [...state.path, folder.name],
-									},
-								})
-							}
-						>
-							{folder.name}
-						</td>
+		<div style={{ overflowY: "auto", height: "200px" }}>
+			<table>
+				<thead style={{ position: "sticky", top: "0" }}>
+					<tr>
+						<th>name</th>
+						<th>count: {state.folders.length}</th>
 					</tr>
-				))}
-			</tbody>
-		</table>
+				</thead>
+				<tbody>
+					{state.folders.map((folder) => (
+						<tr key={(folder as any).id}>
+							<td
+								onClick={() =>
+									dispatch({
+										type: "SET_VAULT_PATH",
+										payload: {
+											path: [...state.path, folder.name],
+										},
+									})
+								}
+							>
+								{folder.name}
+							</td>
+						</tr>
+					))}
+				</tbody>
+			</table>
+		</div>
 	);
 };
