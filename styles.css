@@ -107,3 +107,23 @@ button.btn-text-link {
 		margin-right: var(--size-4-2);
 	}
 }
+
+.folder-select-table {
+	width: 100%;
+	& tr,
+	td {
+		margin: 0;
+		padding: 0;
+	}
+
+	& tr.table-alt-row {
+		background-color: var(--background-primary-alt);
+	}
+
+	& tr:hover {
+		background-color: var(--background-modifier-hover);
+	}
+	& tr:active {
+		background-color: var(--background-modifier-active-hover);
+	}
+}

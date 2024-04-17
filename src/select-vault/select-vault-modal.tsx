@@ -185,17 +185,22 @@ const TableBody: React.FC = () => {
 	if (!state.folders) return null;
 
 	return (
-		<div style={{ overflowY: "auto", height: "200px" }}>
-			<table>
+		<div style={{ overflowY: "auto", height: "225px" }}>
+			<table className="folder-select-table">
+				{/*
 				<thead style={{ position: "sticky", top: "0" }}>
 					<tr>
 						<th>name</th>
 						<th>count: {state.folders.length}</th>
 					</tr>
 				</thead>
+				*/}
 				<tbody>
-					{state.folders.map((folder) => (
-						<tr key={(folder as any).id}>
+					{state.folders.map((folder, idx) => (
+						<tr
+							className={`table-row ${idx % 2 == 0 ? "table-alt-row" : ""}`}
+							key={(folder as any).id}
+						>
 							<td
 								onClick={() =>
 									dispatch({
