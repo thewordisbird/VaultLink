@@ -21,6 +21,7 @@ type State = {
 		| files.DeletedMetadataReference
 	)[];
 	isAddFolderDisplayed: boolean;
+	isLoading: boolean;
 };
 
 type Action =
@@ -37,7 +38,8 @@ type Action =
 			};
 	  }
 	| { type: "ADD_FOLDER"; payload: { folderName: string } }
-	| { type: "TOGGLE_ADD_FOLDER" };
+	| { type: "TOGGLE_ADD_FOLDER" }
+	| { type: "SET_IS_LOADING" };
 
 const reducer = (state: State, action: Action) => {
 	switch (action.type) {
@@ -52,6 +54,7 @@ const reducer = (state: State, action: Action) => {
 			return {
 				...state,
 				folders: action.payload.folders,
+				isLoading: false,
 			};
 		case "ADD_FOLDER":
 			return {
@@ -63,6 +66,11 @@ const reducer = (state: State, action: Action) => {
 			return {
 				...state,
 				isAddFolderDisplayed: !state.isAddFolderDisplayed,
+			};
+		case "SET_IS_LOADING":
+			return {
+				...state,
+				isLoading: true,
 			};
 		default:
 			throw new Error("Reducer Error: Invalid Action");
@@ -92,10 +100,12 @@ export const SelectVaultProvider: React.FC<SelectVaultProviderProps> = ({
 		path: currentPath ? currentPath.split("/") : [],
 		folders: [],
 		isAddFolderDisplayed: false,
+		isLoading: false,
 	});
 
 	useEffect(() => {
 		console.log("state.path:", state.path);
+		dispatch({ type: "SET_IS_LOADING" });
 		listFolders({
 			path: state.path.length ? "/" + state.path.join("/") : "",
 		}).then((res) => {

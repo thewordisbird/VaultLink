@@ -184,17 +184,11 @@ const TableBody: React.FC = () => {
 
 	if (!state.folders) return null;
 
+	if (state.isLoading) return <h3>Loading...</h3>;
+	if (!state.folders.length) return <h3>No sub-folders</h3>;
 	return (
 		<div style={{ overflowY: "auto", height: "225px" }}>
 			<table className="folder-select-table">
-				{/*
-				<thead style={{ position: "sticky", top: "0" }}>
-					<tr>
-						<th>name</th>
-						<th>count: {state.folders.length}</th>
-					</tr>
-				</thead>
-				*/}
 				<tbody>
 					{state.folders.map((folder, idx) => (
 						<tr
