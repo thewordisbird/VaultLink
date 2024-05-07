@@ -51,3 +51,79 @@ button.dropbox_button {
 	font-weight: 600;
 	color: #f7f5f2;
 }
+
+.control-container {
+	display: flex;
+	flex-direction: row;
+	justify-content: space-between;
+	align-items: center;
+}
+
+.control-btn-container {
+	display: flex;
+	flex-direction: row;
+	justify-content: flex-end;
+	gap: 8px;
+}
+
+.display-slash {
+	padding: var(--size-2-2);
+}
+
+button.btn-text-link {
+	--interactive-normal: none;
+	--input-shadow: none;
+
+	padding: 0;
+
+	&:hover {
+		--interactive-hover: none;
+		--input-shadow-hover: none;
+		text-decoration: underline;
+	}
+}
+
+.folder-current-location {
+	width: 100%;
+	display: flex;
+	align-items: center;
+	flex-direction: row;
+}
+
+.add-folder-form {
+	display: flex;
+	flex-grow: 1;
+	flex-direction: row;
+	justify-content: space-between;
+	padding: var(--size-2-2);
+	& input {
+		flex-grow: 1;
+	}
+}
+
+.add-folder-form-control {
+	& button:first-child {
+		margin-left: var(--size-4-4);
+		margin-right: var(--size-4-2);
+	}
+}
+
+.folder-select-table {
+	width: 100%;
+	& tr,
+	td {
+		margin: 0;
+		padding: 0;
+	}
+
+	& tr.table-alt-row {
+		background-color: var(--background-primary-alt);
+	}
+
+	& tr:hover {
+		background-color: var(--background-modifier-hover);
+	}
+	& tr:active {
+		background-color: var(--background-modifier-active-hover);
+	}
+}

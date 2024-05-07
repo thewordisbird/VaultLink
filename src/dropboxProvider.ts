@@ -115,12 +115,18 @@ export class DropboxProvider {
 	}
 	/* End Authentication and Authorization */
 
-	fetchFileInfo(): Promise<void | DropboxResponse<files.ListFolderResult>> {
+	listFolders(
+		args: files.ListFolderArg,
+	): Promise<void | DropboxResponse<files.ListFolderResult>> {
 		return this.dropbox
-			.filesListFolder({
-				path: "",
-			})
+			.filesListFolder(args)
 			.catch((error) => console.error(error));
+	}
+
+	addFolder(
+		path: string,
+	): Promise<DropboxResponse<files.CreateFolderResult>> {
+		return this.dropbox.filesCreateFolderV2({ path });
 	}
 
 	getUserInfo(): Promise<void> {
