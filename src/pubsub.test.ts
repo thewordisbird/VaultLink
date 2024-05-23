@@ -1,3 +1,4 @@
+import { log } from "console";
 import { PubSub } from "./pubsub";
 afterEach(() => {
 	PubSub.resetInstance();
@@ -28,12 +29,12 @@ describe("pubsub", () => {
 				console.log("hello, world!");
 			});
 			expect(pubsub.subscribers.has("test")).toBeTruthy();
-			expect(pubsub.subscribers.get("test")!.length).toBe(1);
+			expect(pubsub.subscribers.get("test")!.size).toBe(1);
 			pubsub.subscribe("test", () => {
 				console.log("hello, pubsub!");
 			});
 
-			expect(pubsub.subscribers.get("test")!.length).toBe(2);
+			expect(pubsub.subscribers.get("test")!.size).toBe(2);
 		});
 		it("should return an unsubscribe method to unsubscribe from a topic", () => {
 			const pubsub = new PubSub();
@@ -44,7 +45,9 @@ describe("pubsub", () => {
 			});
 			expect(pubsub.subscribers.has("test")).toBeTruthy();
 
+			log(pubsub.subscribers);
 			unsubscribe();
+			log(pubsub.subscribers);
 			expect(pubsub.subscribers.has("test")).toBeFalsy();
 		});
 		it("should only unsubscribe the specific subscription", () => {
@@ -63,6 +66,9 @@ describe("pubsub", () => {
 			unsubscribe1();
 			expect(pubsub.subscribers.has("test1")).toBeFalsy();
 			expect(pubsub.subscribers.has("test2")).toBeTruthy();
+
+			unsubscribe2();
+			expect(pubsub.subscribers.has("test2")).toBeFalsy();
 		});
 	});
 	describe("publish", () => {
