@@ -5,6 +5,10 @@ let instance: PubSub | undefined;
 export class PubSub {
 	subscribers: Map<string, [string, (args: unknown) => void][]> = new Map();
 
+	static resetInstance() {
+		instance = undefined;
+	}
+
 	constructor() {
 		if (instance) return instance;
 
