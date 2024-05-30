@@ -1,5 +1,5 @@
-import { log } from "console";
 import { PubSub } from "./pubsub";
+
 afterEach(() => {
 	PubSub.resetInstance();
 });
@@ -45,9 +45,7 @@ describe("pubsub", () => {
 			});
 			expect(pubsub.subscribers.has("test")).toBeTruthy();
 
-			log(pubsub.subscribers);
 			unsubscribe();
-			log(pubsub.subscribers);
 			expect(pubsub.subscribers.has("test")).toBeFalsy();
 		});
 		it("should only unsubscribe the specific subscription", () => {
