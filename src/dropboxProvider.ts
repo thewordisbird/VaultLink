@@ -13,6 +13,10 @@ type DropboxState = {
 const REDIRECT_URI = "obsidian://connect-dropbox";
 const CLIENT_ID = "vofawt4jgywrgey";
 
+export const DROPBOX_PROVIDER_ERRORS = {
+	authenticationError: "Auth Error: Unable to authenticate with dropbox",
+};
+
 export class DropboxProvider {
 	dropbox: Dropbox;
 	dropboxAuth: DropboxAuth;
@@ -29,7 +33,7 @@ export class DropboxProvider {
 	}
 
 	/* Start Authentication and Authorization */
-	getAuthorizationToken(): Promise<void> {
+	getAuthenticationUrl(): Promise<String> {
 		return this.dropboxAuth
 			.getAuthenticationUrl(
 				REDIRECT_URI, // redirectUri
@@ -40,15 +44,13 @@ export class DropboxProvider {
 				undefined, // includeGrantedScopes
 				true, // usePKCE
 			)
-			.then((authUrl) => {
-				window.sessionStorage.clear();
-				window.sessionStorage.setItem(
-					"codeVerifier",
-					this.dropboxAuth.getCodeVerifier(),
-				);
-				window.location.href = authUrl as string;
-			})
-			.catch((error) => console.error(error));
+			.catch((_e) => {
+				throw new Error(DROPBOX_PROVIDER_ERRORS.authenticationError);
+			});
+	}
+
+	getCodeVerfier(): string {
+		return this.dropboxAuth.getCodeVerifier();
 	}
 
 	getAccessToken(protocolData: ObsidianProtocolData): Promise<void> {

@@ -42,7 +42,6 @@ export class SettingsTab extends PluginSettingTab {
 		/* Everytime the setting tab is loaded check for auth? */
 		const authState =
 			await this.plugin.dropboxProvider.getAuthorizationState();
-		console.log("dropbox authorization state:", authState);
 
 		const { containerEl } = this;
 
@@ -64,9 +63,15 @@ export class SettingsTab extends PluginSettingTab {
 		const connectDropboxButton = cloudConnectSection.createEl("button");
 		connectDropboxButton.innerText = "Connect To Dropbox";
 		connectDropboxButton.className = "dropbox_button";
-		connectDropboxButton.onClickEvent(() =>
-			this.plugin.dropboxProvider.getAuthorizationToken(),
-		);
+		connectDropboxButton.onClickEvent(async () => {
+			const authUrl =
+				await this.plugin.dropboxProvider.getAuthenticationUrl();
+			const codeVerifier = this.plugin.dropboxProvider.getCodeVerfier();
+
+			window.sessionStorage.clear();
+			window.sessionStorage.setItem("codeVerifier", codeVerifier);
+			window.location.href = authUrl as string;
+		});
 
 		const cloudDisconnectSection = containerEl.createEl("section");
 		cloudDisconnectSection.className = "settings_section";
