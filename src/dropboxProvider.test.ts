@@ -95,6 +95,19 @@ describe("dropbox-provider", () => {
 		});
 	});
 
+	describe("getCodeVerifier", () => {
+		const MOCKED_GET_CODE_VERIFIER_RETURN = "mocked getCodeVerifier return";
+		it("should return the code verifier from the dropbox sdk", () => {
+			const db = new DropboxProvider();
+
+			jest.mocked(
+				mockedDropboxAuth.mock.instances[0].getCodeVerifier,
+			).mockReturnValue(MOCKED_GET_CODE_VERIFIER_RETURN);
+
+			expect(db.getCodeVerifier()).toBe(MOCKED_GET_CODE_VERIFIER_RETURN);
+		});
+	});
+	/*
 	describe("getAcessToken", () => {
 		it("should throw an error if no code is present in the protocolData", () => {});
 		it("should throw an error if no codeVerifier is present in sessionStorage", () => {});
@@ -120,4 +133,5 @@ describe("dropbox-provider", () => {
 	describe("addFolder", () => {});
 
 	describe("getUserInfo", () => {});
+	*/
 });

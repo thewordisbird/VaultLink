@@ -49,7 +49,7 @@ export class DropboxProvider {
 			});
 	}
 
-	getCodeVerfier(): string {
+	getCodeVerifier(): string {
 		return this.dropboxAuth.getCodeVerifier();
 	}
 
