@@ -24,9 +24,25 @@ export default class ObsidianDropboxConnect extends Plugin {
 		this.registerObsidianProtocolHandler(
 			"connect-dropbox",
 			(protocolData) => {
-				this.dropboxProvider.getAccessToken(protocolData).then(() => {
-					this.dropboxProvider.getUserInfo();
-				});
+				// TODO: Handle error if no code is available
+				if (!protocolData.code) throw new Error("");
+
+				const codeVerifier =
+					window.sessionStorage.getItem("codeVerifier");
+				// TOOD: Handle error if no code verifier in sessionStorage
+				if (!codeVerifier) throw new Error("");
+				this.dropboxProvider.setCodeVerifier(codeVerifier);
+
+				this.dropboxProvider
+					.setAccessAndRefreshToken(protocolData.code)
+					.then(({ refreshToken }) => {
+						// Store Refresh token in local storage for persistant authorization
+						localStorage.setItem(
+							"dropboxRefreshToken",
+							refreshToken,
+						);
+						this.dropboxProvider.getUserInfo();
+					});
 				pubsub.publish("authorization-success");
 			},
 		);

@@ -1,5 +1,4 @@
 import { Dropbox, DropboxAuth, DropboxResponse, files } from "dropbox";
-import { ObsidianProtocolData } from "obsidian";
 
 type DropboxAccount = {
 	accountId: string;
@@ -10,8 +9,8 @@ type DropboxState = {
 	account: DropboxAccount;
 };
 
-const REDIRECT_URI = "obsidian://connect-dropbox";
-const CLIENT_ID = "vofawt4jgywrgey";
+export const REDIRECT_URI = "obsidian://connect-dropbox";
+export const CLIENT_ID = "vofawt4jgywrgey";
 
 export const DROPBOX_PROVIDER_ERRORS = {
 	authenticationError: "Auth Error: Unable to authenticate with dropbox",
@@ -53,43 +52,49 @@ export class DropboxProvider {
 		return this.dropboxAuth.getCodeVerifier();
 	}
 
-	getAccessToken(protocolData: ObsidianProtocolData): Promise<void> {
-		const { code } = protocolData;
+	setCodeVerifier(codeVerifier: string): void {
+		return this.dropboxAuth.setCodeVerifier(codeVerifier);
+	}
 
-		if (!code) throw new Error("Authorization Error: Code Not Available");
+	async setAccessAndRefreshToken(
+		authorizationCode: string,
+	): Promise<{ refreshToken: string }> {
+		try {
+			const {
+				result: { access_token, refresh_token },
+			} = (await this.dropboxAuth.getAccessTokenFromCode(
+				REDIRECT_URI,
+				authorizationCode,
+			)) as DropboxResponse<{
+				access_token: string;
+				refresh_token: string;
+			}>;
 
-		const codeVerifier = window.sessionStorage.getItem("codeVerifier");
-		if (!codeVerifier) {
-			throw new Error("Authorization Error: Code Verifier Not Available");
+			this.dropboxAuth.setAccessToken(access_token);
+			this.dropboxAuth.setRefreshToken(refresh_token);
+
+			return { refreshToken: refresh_token };
+		} catch (_e) {
+			throw new Error(DROPBOX_PROVIDER_ERRORS.authenticationError);
 		}
 
-		this.dropboxAuth.setCodeVerifier(codeVerifier);
-
+		//return { refreshToken: res.result.refresh_token };
+		/*
 		return this.dropboxAuth
-			.getAccessTokenFromCode(REDIRECT_URI, code)
+			.getAccessTokenFromCode(REDIRECT_URI, authorizationCode)
 			.then(
 				(
-					response: DropboxResponse<{
+					res: DropboxResponse<{
 						access_token: string;
 						refresh_token: string;
 					}>,
 				) => {
-					this.dropboxAuth.setAccessToken(
-						response.result.access_token,
-					);
 
-					this.dropboxAuth.setRefreshToken(
-						response.result.refresh_token,
-					);
-
-					// Store Refresh token in local storage for persistant authorization
-					localStorage.setItem(
-						"dropboxRefreshToken",
-						response.result.refresh_token,
-					);
 				},
 			)
-			.catch((error) => console.error(error));
+			.catch((_e) => {
+			});
+	*/
 	}
 
 	revokeAuthorizationToken(): Promise<void> {
