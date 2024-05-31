@@ -66,7 +66,7 @@ export class SettingsTab extends PluginSettingTab {
 		connectDropboxButton.onClickEvent(async () => {
 			const authUrl =
 				await this.plugin.dropboxProvider.getAuthenticationUrl();
-			const codeVerifier = this.plugin.dropboxProvider.getCodeVerfier();
+			const codeVerifier = this.plugin.dropboxProvider.getCodeVerifier();
 
 			window.sessionStorage.clear();
 			window.sessionStorage.setItem("codeVerifier", codeVerifier);
