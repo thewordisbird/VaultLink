@@ -77,24 +77,6 @@ export class DropboxProvider {
 		} catch (_e) {
 			throw new Error(DROPBOX_PROVIDER_ERRORS.authenticationError);
 		}
-
-		//return { refreshToken: res.result.refresh_token };
-		/*
-		return this.dropboxAuth
-			.getAccessTokenFromCode(REDIRECT_URI, authorizationCode)
-			.then(
-				(
-					res: DropboxResponse<{
-						access_token: string;
-						refresh_token: string;
-					}>,
-				) => {
-
-				},
-			)
-			.catch((_e) => {
-			});
-	*/
 	}
 
 	revokeAuthorizationToken(): Promise<void> {
