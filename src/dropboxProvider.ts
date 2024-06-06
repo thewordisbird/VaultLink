@@ -14,6 +14,7 @@ export const CLIENT_ID = "vofawt4jgywrgey";
 
 export const DROPBOX_PROVIDER_ERRORS = {
 	authenticationError: "Auth Error: Unable to authenticate with dropbox",
+	revocationError: "Revokeation Error: Unable to revoke dropbox token",
 };
 
 export class DropboxProvider {
@@ -83,9 +84,11 @@ export class DropboxProvider {
 		return this.dropbox
 			.authTokenRevoke()
 			.then(() => {
-				localStorage.removeItem("dropboxRefreshToken");
+				this.state = {} as DropboxState;
 			})
-			.catch((error) => console.error(error));
+			.catch((_e: any) => {
+				throw new Error(DROPBOX_PROVIDER_ERRORS.revocationError);
+			});
 	}
 
 	authorizeWithRefreshToken(): void {

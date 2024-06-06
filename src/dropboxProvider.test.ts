@@ -9,20 +9,16 @@ import type { DropboxResponse } from "dropbox";
 
 const MOCK_RETURN_URL = "www.mock.url";
 
-jest.mock<{ Dropbox: typeof Dropbox; DropboxAuth: typeof DropboxAuth }>(
-	"dropbox",
-);
+jest.mock("dropbox");
 
-// const mockedDropbox = <jest.Mock<Dropbox>>Dropbox;
-// const mockedDropboxAuth = <jest.Mock<DropboxAuth>>DropboxAuth;
 const mockedDropbox = jest.mocked(Dropbox);
 const mockedDropboxAuth = jest.mocked(DropboxAuth);
 
 beforeEach(() => {
-	jest.clearAllMocks();
+	mockedDropbox.mockClear();
+	mockedDropboxAuth.mockClear();
 });
 
-afterAll(() => {});
 describe("dropbox-provider", () => {
 	describe("constructor", () => {
 		it("should instantiate Dropbox and DropboxAuth from the dropbox sdk", () => {
@@ -100,7 +96,6 @@ describe("dropbox-provider", () => {
 			);
 		});
 	});
-
 	describe("getCodeVerifier", () => {
 		const MOCKED_GET_CODE_VERIFIER_RETURN = "mocked getCodeVerifier return";
 		it("should return the code verifier from the dropbox sdk", () => {
@@ -248,8 +243,43 @@ describe("dropbox-provider", () => {
 
 	/*
 	describe("revokeAuthorizationToken", () => {
-		it("should thow an error if the DropboxAuth authTokenRevoke method fails", () => {});
-		// The success case is handled by the DrobboxAuth sdk.
+		afterEach(() => {
+			jest.resetAllMocks();
+		});
+		it("should make a call to the authTokenRevoke method on DropboxAuth", async () => {
+			const db = new DropboxProvider();
+
+			// const mockedAuthTokenRevoke = jest.mocked(
+			// 	mockedDropbox.mock.instances[0].authTokenRevoke.bind(
+			// 		mockedDropbox,
+			// 	),
+			// );
+
+			const mockDbInstance = jest.mocked(
+				mockedDropbox.mock.instances[0],
+			) as any;
+			const mockedDropboxRequest = mockDbInstance.request;
+
+			await db.revokeAuthorizationToken();
+
+			expect(mockedDropboxRequest).toHaveBeenCalled();
+		});
+		it("should thow an error if the DropboxAuth authTokenRevoke method fails", async () => {
+			const db = new DropboxProvider();
+
+			// jest.mocked(
+			// 	mockedDropbox.mock.instances[0].authTokenRevoke,
+			// ).mockRejectedValue({
+			// 	status: 400,
+			// 	headers: [],
+			// });
+			//
+			// try {
+			// 	await db.revokeAuthorizationToken();
+			// } catch (e) {
+			// 	expect(e.message).toBe(DROPBOX_PROVIDER_ERRORS.revocationError);
+			// }
+		});
 	});
 
 	describe("authorizeWithRefreshToken", () => {

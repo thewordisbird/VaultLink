@@ -86,6 +86,7 @@ export class SettingsTab extends PluginSettingTab {
 		disconnectButton.id = "dbx-btn";
 		disconnectButton.onClickEvent(() =>
 			this.plugin.dropboxProvider.revokeAuthorizationToken().then(() => {
+				localStorage.removeItem("dropboxRefreshToken");
 				cloudDisconnectSection.hide();
 				cloudConnectSection.show();
 			}),
