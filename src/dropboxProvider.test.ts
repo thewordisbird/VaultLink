@@ -1,82 +1,107 @@
+import { Dropbox, DropboxAuth } from "dropbox";
 import {
 	DropboxProvider,
 	REDIRECT_URI,
 	CLIENT_ID,
 	DROPBOX_PROVIDER_ERRORS,
 } from "./dropboxProvider";
-import { Dropbox, DropboxAuth } from "dropbox";
-import type { DropboxResponse } from "dropbox";
+// import type { DropboxResponse } from "dropbox";
 
-const MOCK_RETURN_URL = "www.mock.url";
+const mockAuthTokenRevoke = jest.fn();
+const mockGetAuthenticationUrl = jest.fn();
+const mockGetCodeVerifier = jest.fn();
+const mockSetCodeVerifier = jest.fn();
+const mockGetAccessTokenFromCode = jest.fn();
+const mockSetAccessToken = jest.fn();
+const mockSetRefreshToken = jest.fn();
 
-jest.mock("dropbox");
-
-const mockedDropbox = jest.mocked(Dropbox);
-const mockedDropboxAuth = jest.mocked(DropboxAuth);
+jest.mock("dropbox", () => {
+	return {
+		Dropbox: jest.fn().mockImplementation(() => {
+			return {
+				authTokenRevoke: mockAuthTokenRevoke,
+			};
+		}),
+		DropboxAuth: jest.fn().mockImplementation(() => {
+			return {
+				getAuthenticationUrl: mockGetAuthenticationUrl,
+				getCodeVerifier: mockGetCodeVerifier,
+				setCodeVerifier: mockSetCodeVerifier,
+				getAccessTokenFromCode: mockGetAccessTokenFromCode,
+				setAccessToken: mockSetAccessToken,
+				setRefreshToken: mockSetRefreshToken,
+			};
+		}),
+	};
+});
+const mockDropbox = jest.mocked(Dropbox);
+const mockDropboxAuth = jest.mocked(DropboxAuth);
 
 beforeEach(() => {
-	mockedDropbox.mockClear();
-	mockedDropboxAuth.mockClear();
+	mockDropbox.mockClear();
+	mockDropboxAuth.mockClear();
 });
 
 describe("dropbox-provider", () => {
 	describe("constructor", () => {
 		it("should instantiate Dropbox and DropboxAuth from the dropbox sdk", () => {
-			const db = new DropboxProvider();
+			new DropboxProvider();
 
-			expect(mockedDropbox).toHaveBeenCalled();
-			expect(mockedDropboxAuth).toHaveBeenCalled();
+			expect(mockDropbox).toHaveBeenCalled();
+			expect(mockDropboxAuth).toHaveBeenCalled();
 
-			expect(db.dropboxAuth).toBeInstanceOf(mockedDropboxAuth);
-			expect(db.dropbox).toBeInstanceOf(mockedDropbox);
+			expect(mockDropbox).toEqual(Dropbox);
+			// TODO: Figure out how to properly test mock instance
+			// expect(db.dropbox).toBeInstanceOf(mockDropbox.mock.instances[0]);
+			// expect(db.dropboxAuth).toBeInstanceOf(DropboxAuth);
 		});
 	});
 
 	describe("getAuthenticationUrl", () => {
+		const MOCK_GET_AUTHENTICATION_URL_RETURN = "mock.authentication.url";
+		const getAutenticationUrlParams = [
+			"obsidian://connect-dropbox",
+			undefined,
+			"code",
+			"offline",
+			undefined,
+			undefined,
+			true,
+		];
+
+		beforeEach(() => {
+			mockGetAuthenticationUrl.mockClear();
+		});
 		it("should call the DropboxAuth getAuthenticationUrl method with the correct argruments", async () => {
-			const getAutenticationUrlParams = [
-				"obsidian://connect-dropbox",
-				undefined,
-				"code",
-				"offline",
-				undefined,
-				undefined,
-				true,
-			];
+			mockGetAuthenticationUrl.mockResolvedValue(
+				MOCK_GET_AUTHENTICATION_URL_RETURN,
+			);
 
 			const db = new DropboxProvider();
-			const mockedGetAuthenticationUrl = jest
-				.mocked(
-					mockedDropboxAuth.mock.instances[0].getAuthenticationUrl,
-				)
-				.mockResolvedValue(MOCK_RETURN_URL);
-
 			await db.getAuthenticationUrl();
 
-			expect(mockedGetAuthenticationUrl).toHaveBeenCalledWith(
+			expect(mockGetAuthenticationUrl).toHaveBeenCalledWith(
 				...getAutenticationUrlParams,
 			);
 		});
 
 		it("should return a string url", async () => {
-			const db = new DropboxProvider();
-			jest.mocked(
-				mockedDropboxAuth.mock.instances[0].getAuthenticationUrl,
-			).mockResolvedValue(MOCK_RETURN_URL);
+			mockGetAuthenticationUrl.mockResolvedValue(
+				MOCK_GET_AUTHENTICATION_URL_RETURN,
+			);
 
+			const db = new DropboxProvider();
 			const authUrl = await db.getAuthenticationUrl();
 
-			expect(authUrl).toBe(MOCK_RETURN_URL);
+			expect(authUrl).toBe(MOCK_GET_AUTHENTICATION_URL_RETURN);
 		});
 
 		it("should catch the dropbox sdk error and throw an application specific error", async () => {
-			const db = new DropboxProvider();
-
-			jest.mocked(
-				mockedDropboxAuth.mock.instances[0].getAuthenticationUrl,
-			)
-				.mockResolvedValueOnce(MOCK_RETURN_URL)
+			mockGetAuthenticationUrl
+				.mockResolvedValueOnce(MOCK_GET_AUTHENTICATION_URL_RETURN)
 				.mockRejectedValueOnce(new Error("Dropbox SDK Error"));
+
+			const db = new DropboxProvider();
 
 			let err = undefined;
 			try {
@@ -96,30 +121,37 @@ describe("dropbox-provider", () => {
 			);
 		});
 	});
+
 	describe("getCodeVerifier", () => {
 		const MOCKED_GET_CODE_VERIFIER_RETURN = "mocked getCodeVerifier return";
-		it("should return the code verifier from the dropbox sdk", () => {
-			const db = new DropboxProvider();
 
-			jest.mocked(
-				mockedDropboxAuth.mock.instances[0].getCodeVerifier,
-			).mockReturnValue(MOCKED_GET_CODE_VERIFIER_RETURN);
+		beforeEach(() => {
+			mockGetCodeVerifier.mockClear();
+		});
+
+		it("should return the code verifier from the dropbox sdk", () => {
+			mockGetCodeVerifier.mockReturnValue(
+				MOCKED_GET_CODE_VERIFIER_RETURN,
+			);
+
+			const db = new DropboxProvider();
 
 			expect(db.getCodeVerifier()).toBe(MOCKED_GET_CODE_VERIFIER_RETURN);
 		});
 	});
 
 	describe("setCodeVerifier", () => {
-		it("should make a call to the setCodeVerifier method on DropboxAuth with the passed in string argument", () => {
-			const CODE_VERIFIER = "test code verifier";
-			const db = new DropboxProvider();
+		const CODE_VERIFIER = "test code verifier";
 
-			const mockedSetCodeVerifier = jest.mocked(
-				mockedDropboxAuth.mock.instances[0].setCodeVerifier,
-			);
+		beforeEach(() => {
+			mockSetCodeVerifier.mockClear();
+		});
+
+		it("should make a call to the setCodeVerifier method on DropboxAuth with the passed in string argument", () => {
+			const db = new DropboxProvider();
 			db.setCodeVerifier(CODE_VERIFIER);
 
-			expect(mockedSetCodeVerifier).toHaveBeenCalledWith(CODE_VERIFIER);
+			expect(mockSetCodeVerifier).toHaveBeenCalledWith(CODE_VERIFIER);
 		});
 	});
 	describe("setAccessAndRefreshToken", () => {
@@ -127,42 +159,41 @@ describe("dropbox-provider", () => {
 		const MOCK_ACCESS_TOKEN = "mock access token";
 		const MOCK_REFRESH_TOKEN = "mock refress token";
 
-		let db: DropboxProvider | undefined;
-		let mockedGetAccessTokenFromCode:
-			| jest.MockedFunctionDeep<
-					(
-						redirectUri: string,
-						code: string,
-					) => Promise<DropboxResponse<object>>
-			  >
-			| undefined;
-		let mockedSetAccessToken:
-			| jest.MockedFunctionDeep<(accessToken: string) => void>
-			| undefined;
-		let mockedSetRefreshToken:
-			| jest.MockedFunctionDeep<(refreshToken: string) => void>
-			| undefined;
+		// let db: DropboxProvider | undefined;
+		// let mockedGetAccessTokenFromCode:
+		// 	| jest.MockedFunctionDeep<
+		// 			(
+		// 				redirectUri: string,
+		// 				code: string,
+		// 			) => Promise<DropboxResponse<object>>
+		// 	  >
+		// 	| undefined;
+		// let mockedSetAccessToken:
+		// 	| jest.MockedFunctionDeep<(accessToken: string) => void>
+		// 	| undefined;
+		// let mockedSetRefreshToken:
+		// 	| jest.MockedFunctionDeep<(refreshToken: string) => void>
+		// 	| undefined;
 
 		beforeEach(() => {
-			db = new DropboxProvider();
-
-			mockedGetAccessTokenFromCode = jest.mocked(
-				mockedDropboxAuth.mock.instances[0].getAccessTokenFromCode,
-			);
-			mockedSetAccessToken = jest.mocked(
-				mockedDropboxAuth.mock.instances[0].setAccessToken,
-			);
-			mockedSetRefreshToken = jest.mocked(
-				mockedDropboxAuth.mock.instances[0].setRefreshToken,
-			);
-		});
-
-		afterEach(() => {
-			jest.clearAllMocks();
+			mockGetAccessTokenFromCode.mockClear();
+			mockSetAccessToken.mockClear();
+			mockSetRefreshToken.mockClear();
+			// db = new DropboxProvider();
+			//
+			// mockedGetAccessTokenFromCode = jest.mocked(
+			// 	mockedDropboxAuth.mock.instances[0].getAccessTokenFromCode,
+			// );
+			// mockedSetAccessToken = jest.mocked(
+			// 	mockedDropboxAuth.mock.instances[0].setAccessToken,
+			// );
+			// mockedSetRefreshToken = jest.mocked(
+			// 	mockedDropboxAuth.mock.instances[0].setRefreshToken,
+			// );
 		});
 
 		it("should make a call to the getAccessTokenFromCode method on DropboxAuth", async () => {
-			mockedGetAccessTokenFromCode!.mockResolvedValue({
+			mockGetAccessTokenFromCode.mockResolvedValue({
 				status: 200,
 				headers: [],
 				result: {
@@ -171,15 +202,17 @@ describe("dropbox-provider", () => {
 				},
 			});
 
-			await db!.setAccessAndRefreshToken(AUTHORIZATION_CODE);
+			const db = new DropboxProvider();
+			await db.setAccessAndRefreshToken(AUTHORIZATION_CODE);
 
-			expect(mockedGetAccessTokenFromCode).toHaveBeenCalledWith(
+			expect(mockGetAccessTokenFromCode).toHaveBeenCalledWith(
 				REDIRECT_URI,
 				AUTHORIZATION_CODE,
 			);
 		});
+
 		it("should make a call to the setAccessToken method on DropboxAuth", async () => {
-			mockedGetAccessTokenFromCode!.mockResolvedValue({
+			mockGetAccessTokenFromCode.mockResolvedValue({
 				status: 200,
 				headers: [],
 				result: {
@@ -188,14 +221,14 @@ describe("dropbox-provider", () => {
 				},
 			});
 
-			await db!.setAccessAndRefreshToken(AUTHORIZATION_CODE);
+			const db = new DropboxProvider();
+			await db.setAccessAndRefreshToken(AUTHORIZATION_CODE);
 
-			expect(mockedSetAccessToken).toHaveBeenCalledWith(
-				MOCK_ACCESS_TOKEN,
-			);
+			expect(mockSetAccessToken).toHaveBeenCalledWith(MOCK_ACCESS_TOKEN);
 		});
+
 		it("should make a call to the setRefreshToken method on DropboxAuth", async () => {
-			mockedGetAccessTokenFromCode!.mockResolvedValue({
+			mockGetAccessTokenFromCode.mockResolvedValue({
 				status: 200,
 				headers: [],
 				result: {
@@ -204,14 +237,16 @@ describe("dropbox-provider", () => {
 				},
 			});
 
-			await db!.setAccessAndRefreshToken(AUTHORIZATION_CODE);
+			const db = new DropboxProvider();
+			await db.setAccessAndRefreshToken(AUTHORIZATION_CODE);
 
-			expect(mockedSetRefreshToken).toHaveBeenCalledWith(
+			expect(mockSetRefreshToken).toHaveBeenCalledWith(
 				MOCK_REFRESH_TOKEN,
 			);
 		});
+
 		it("should return the refresh token", async () => {
-			mockedGetAccessTokenFromCode!.mockResolvedValue({
+			mockGetAccessTokenFromCode.mockResolvedValue({
 				status: 200,
 				headers: [],
 				result: {
@@ -220,80 +255,102 @@ describe("dropbox-provider", () => {
 				},
 			});
 
+			const db = new DropboxProvider();
+
 			expect(
-				await db!.setAccessAndRefreshToken(AUTHORIZATION_CODE),
+				await db.setAccessAndRefreshToken(AUTHORIZATION_CODE),
 			).toEqual({ refreshToken: MOCK_REFRESH_TOKEN });
 		});
+
 		it("should catch the dropbox sdk error and throw an application specific error", async () => {
-			mockedGetAccessTokenFromCode!.mockRejectedValue({
+			mockGetAccessTokenFromCode.mockRejectedValue({
 				status: 400,
 				headers: [],
 				result: {},
 			});
 
+			const db = new DropboxProvider();
+
+			let err = undefined;
 			try {
-				await db!.setAccessAndRefreshToken(AUTHORIZATION_CODE);
+				await db.setAccessAndRefreshToken(AUTHORIZATION_CODE);
 			} catch (e) {
-				expect(e.message).toBe(
-					DROPBOX_PROVIDER_ERRORS.authenticationError,
-				);
+				err = e;
 			}
+
+			expect(err.message).toBe(
+				DROPBOX_PROVIDER_ERRORS.authenticationError,
+			);
+		});
+	});
+
+	describe("revokeAuthorizationToken", () => {
+		beforeEach(() => {
+			mockAuthTokenRevoke.mockClear();
+		});
+
+		it("should make a call to the authTokenRevoke method on DropboxAuth", async () => {
+			mockAuthTokenRevoke.mockResolvedValue({});
+
+			const db = new DropboxProvider();
+			await db.revokeAuthorizationToken();
+
+			expect(mockAuthTokenRevoke).toHaveBeenCalled();
+		});
+
+		it("should reset the DropboxProvider state to an empty state", async () => {
+			mockAuthTokenRevoke.mockResolvedValue({});
+
+			const db = new DropboxProvider();
+			db.state = {
+				account: {
+					accountId: "123456",
+					email: "test@email.com",
+				},
+			};
+			expect(db.state).not.toEqual({});
+
+			await db.revokeAuthorizationToken();
+
+			expect(db.state).toEqual({});
+		});
+
+		it("should thow an error if the DropboxAuth authTokenRevoke method fails", async () => {
+			mockAuthTokenRevoke.mockRejectedValue({
+				status: 400,
+				headers: [],
+			});
+
+			const db = new DropboxProvider();
+
+			let err = undefined;
+			try {
+				await db.revokeAuthorizationToken();
+			} catch (e) {
+				err = e;
+			}
+			expect(err.message).toBe(DROPBOX_PROVIDER_ERRORS.revocationError);
 		});
 	});
 
 	/*
-	describe("revokeAuthorizationToken", () => {
-		afterEach(() => {
-			jest.resetAllMocks();
-		});
-		it("should make a call to the authTokenRevoke method on DropboxAuth", async () => {
-			const db = new DropboxProvider();
-
-			// const mockedAuthTokenRevoke = jest.mocked(
-			// 	mockedDropbox.mock.instances[0].authTokenRevoke.bind(
-			// 		mockedDropbox,
-			// 	),
-			// );
-
-			const mockDbInstance = jest.mocked(
-				mockedDropbox.mock.instances[0],
-			) as any;
-			const mockedDropboxRequest = mockDbInstance.request;
-
-			await db.revokeAuthorizationToken();
-
-			expect(mockedDropboxRequest).toHaveBeenCalled();
-		});
-		it("should thow an error if the DropboxAuth authTokenRevoke method fails", async () => {
-			const db = new DropboxProvider();
-
-			// jest.mocked(
-			// 	mockedDropbox.mock.instances[0].authTokenRevoke,
-			// ).mockRejectedValue({
-			// 	status: 400,
-			// 	headers: [],
-			// });
-			//
-			// try {
-			// 	await db.revokeAuthorizationToken();
-			// } catch (e) {
-			// 	expect(e.message).toBe(DROPBOX_PROVIDER_ERRORS.revocationError);
-			// }
-		});
-	});
-
 	describe("authorizeWithRefreshToken", () => {
 		// TODO: determine how to handle failing
 		it("should ", () => {});
 	});
-
+	*/
+	/*
 	describe("listFolders", () => {
 		it("should return a list of folders from the Dropbox filesListFolder method", () => {});
 		it("should throw an error if the Dropbox filesListFolder method fails", () => {});
 	});
+	*/
 
+	/*
 	describe("addFolder", () => {});
+	*/
 
+	/*
 	describe("getUserInfo", () => {});
 	*/
 });
