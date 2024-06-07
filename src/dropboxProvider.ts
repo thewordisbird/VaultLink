@@ -91,10 +91,7 @@ export class DropboxProvider {
 			});
 	}
 
-	authorizeWithRefreshToken(): void {
-		const refreshToken = localStorage.getItem("dropboxRefreshToken");
-		if (!refreshToken) return;
-
+	authorizeWithRefreshToken(refreshToken: string): void {
 		this.dropboxAuth.setRefreshToken(refreshToken);
 		this.dropboxAuth.refreshAccessToken();
 	}

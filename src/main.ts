@@ -18,7 +18,8 @@ export default class ObsidianDropboxConnect extends Plugin {
 		this.dropboxProvider = new DropboxProvider();
 
 		// Retrieve and set new access token if a valid refresh token is stored in local storage
-		this.dropboxProvider.authorizeWithRefreshToken();
+		const refreshToken = localStorage.getItem("dropboxRefreshToken");
+		this.dropboxProvider.authorizeWithRefreshToken(refreshToken);
 
 		// Set  protocol handler to catch authorization response form dropbox
 		this.registerObsidianProtocolHandler(

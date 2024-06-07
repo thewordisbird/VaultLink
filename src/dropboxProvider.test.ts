@@ -14,7 +14,7 @@ const mockSetCodeVerifier = jest.fn();
 const mockGetAccessTokenFromCode = jest.fn();
 const mockSetAccessToken = jest.fn();
 const mockSetRefreshToken = jest.fn();
-
+const mockRefreshAccessToken = jest.fn();
 jest.mock("dropbox", () => {
 	return {
 		Dropbox: jest.fn().mockImplementation(() => {
@@ -30,6 +30,7 @@ jest.mock("dropbox", () => {
 				getAccessTokenFromCode: mockGetAccessTokenFromCode,
 				setAccessToken: mockSetAccessToken,
 				setRefreshToken: mockSetRefreshToken,
+				refreshAccessToken: mockRefreshAccessToken,
 			};
 		}),
 	};
@@ -159,37 +160,10 @@ describe("dropbox-provider", () => {
 		const MOCK_ACCESS_TOKEN = "mock access token";
 		const MOCK_REFRESH_TOKEN = "mock refress token";
 
-		// let db: DropboxProvider | undefined;
-		// let mockedGetAccessTokenFromCode:
-		// 	| jest.MockedFunctionDeep<
-		// 			(
-		// 				redirectUri: string,
-		// 				code: string,
-		// 			) => Promise<DropboxResponse<object>>
-		// 	  >
-		// 	| undefined;
-		// let mockedSetAccessToken:
-		// 	| jest.MockedFunctionDeep<(accessToken: string) => void>
-		// 	| undefined;
-		// let mockedSetRefreshToken:
-		// 	| jest.MockedFunctionDeep<(refreshToken: string) => void>
-		// 	| undefined;
-
 		beforeEach(() => {
 			mockGetAccessTokenFromCode.mockClear();
 			mockSetAccessToken.mockClear();
 			mockSetRefreshToken.mockClear();
-			// db = new DropboxProvider();
-			//
-			// mockedGetAccessTokenFromCode = jest.mocked(
-			// 	mockedDropboxAuth.mock.instances[0].getAccessTokenFromCode,
-			// );
-			// mockedSetAccessToken = jest.mocked(
-			// 	mockedDropboxAuth.mock.instances[0].setAccessToken,
-			// );
-			// mockedSetRefreshToken = jest.mocked(
-			// 	mockedDropboxAuth.mock.instances[0].setRefreshToken,
-			// );
 		});
 
 		it("should make a call to the getAccessTokenFromCode method on DropboxAuth", async () => {
@@ -333,12 +307,27 @@ describe("dropbox-provider", () => {
 		});
 	});
 
-	/*
 	describe("authorizeWithRefreshToken", () => {
-		// TODO: determine how to handle failing
-		it("should ", () => {});
+		const REFRESH_TOKEN = "mock refresh token";
+		beforeEach(() => {
+			mockSetRefreshToken.mockClear();
+			mockRefreshAccessToken.mockClear();
+		});
+
+		it("should make a call to the setRefreshToken on Dropbox", () => {
+			const db = new DropboxProvider();
+			db.authorizeWithRefreshToken(REFRESH_TOKEN);
+
+			expect(mockSetRefreshToken).toHaveBeenCalledWith(REFRESH_TOKEN);
+		});
+
+		it("should make a call to the refreshAccessToken on Dropbox", () => {
+			const db = new DropboxProvider();
+			db.authorizeWithRefreshToken(REFRESH_TOKEN);
+
+			expect(mockRefreshAccessToken).toHaveBeenCalledWith();
+		});
 	});
-	*/
 	/*
 	describe("listFolders", () => {
 		it("should return a list of folders from the Dropbox filesListFolder method", () => {});
