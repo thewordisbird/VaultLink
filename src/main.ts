@@ -1,6 +1,6 @@
 import { Plugin } from "obsidian";
 import { DEFAULT_SETTINGS, SettingsTab } from "./settings";
-import { DropboxProvider } from "./dropboxProvider";
+import { DropboxProvider } from "./providers/dropbox.provider";
 import type { PluginSettings } from "./settings";
 import { PubSub } from "./pubsub";
 
@@ -19,7 +19,9 @@ export default class ObsidianDropboxConnect extends Plugin {
 
 		// Retrieve and set new access token if a valid refresh token is stored in local storage
 		const refreshToken = localStorage.getItem("dropboxRefreshToken");
-		this.dropboxProvider.authorizeWithRefreshToken(refreshToken);
+		if (refreshToken) {
+			this.dropboxProvider.authorizeWithRefreshToken(refreshToken);
+		}
 
 		// Set  protocol handler to catch authorization response form dropbox
 		this.registerObsidianProtocolHandler(

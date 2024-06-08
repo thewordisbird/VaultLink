@@ -2,9 +2,8 @@ import { Dropbox, DropboxAuth } from "dropbox";
 import {
 	DropboxProvider,
 	REDIRECT_URI,
-	CLIENT_ID,
 	DROPBOX_PROVIDER_ERRORS,
-} from "./dropboxProvider";
+} from "./dropbox.provider";
 
 // import type { DropboxResponse } from "dropbox";
 

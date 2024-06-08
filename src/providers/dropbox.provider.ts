@@ -1,5 +1,5 @@
-import { Dropbox, DropboxAuth, DropboxResponse, files } from "dropbox";
-import type { Folder } from "./types";
+import { Dropbox, DropboxAuth, DropboxResponse } from "dropbox";
+import type { Folder } from "../types";
 
 type DropboxAccount = {
 	accountId: string;
