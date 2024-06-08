@@ -2,7 +2,7 @@ import { Plugin } from "obsidian";
 import { DEFAULT_SETTINGS, SettingsTab } from "./settings";
 import { DropboxProvider } from "./providers/dropbox.provider";
 import type { PluginSettings } from "./settings";
-import { PubSub } from "./pubsub";
+import { PubSub } from "../lib/pubsub";
 
 export default class ObsidianDropboxConnect extends Plugin {
 	settings: PluginSettings;

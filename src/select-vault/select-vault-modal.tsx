@@ -3,7 +3,7 @@ import { Root, createRoot } from "react-dom/client";
 import { StrictMode, useState } from "react";
 
 import type ObsidianDropboxConnect from "../main";
-import { PubSub } from "../pubsub";
+import { PubSub } from "../../lib/pubsub";
 import { SelectVaultProvider, useSelectVault } from "./context-provider";
 
 export class VaultSelectModal extends Modal {

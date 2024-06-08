@@ -1,6 +1,6 @@
 import { App, Setting, PluginSettingTab } from "obsidian";
 import ObsidianDropboxConnect from "./main";
-import { PubSub } from "./pubsub";
+import { PubSub } from "../lib/pubsub";
 import { VaultSelectModal } from "./select-vault";
 
 export interface PluginSettings {
