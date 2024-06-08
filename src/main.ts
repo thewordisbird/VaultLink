@@ -1,8 +1,8 @@
 import { Plugin } from "obsidian";
 import { DEFAULT_SETTINGS, SettingsTab } from "./settings";
-import { DropboxProvider } from "./dropboxProvider";
+import { DropboxProvider } from "./providers/dropbox.provider";
 import type { PluginSettings } from "./settings";
-import { PubSub } from "./pubsub";
+import { PubSub } from "../lib/pubsub";
 
 export default class ObsidianDropboxConnect extends Plugin {
 	settings: PluginSettings;
@@ -18,15 +18,34 @@ export default class ObsidianDropboxConnect extends Plugin {
 		this.dropboxProvider = new DropboxProvider();
 
 		// Retrieve and set new access token if a valid refresh token is stored in local storage
-		this.dropboxProvider.authorizeWithRefreshToken();
+		const refreshToken = localStorage.getItem("dropboxRefreshToken");
+		if (refreshToken) {
+			this.dropboxProvider.authorizeWithRefreshToken(refreshToken);
+		}
 
 		// Set  protocol handler to catch authorization response form dropbox
 		this.registerObsidianProtocolHandler(
 			"connect-dropbox",
 			(protocolData) => {
-				this.dropboxProvider.getAccessToken(protocolData).then(() => {
-					this.dropboxProvider.getUserInfo();
-				});
+				// TODO: Handle error if no code is available
+				if (!protocolData.code) throw new Error("");
+
+				const codeVerifier =
+					window.sessionStorage.getItem("codeVerifier");
+				// TOOD: Handle error if no code verifier in sessionStorage
+				if (!codeVerifier) throw new Error("");
+				this.dropboxProvider.setCodeVerifier(codeVerifier);
+
+				this.dropboxProvider
+					.setAccessAndRefreshToken(protocolData.code)
+					.then(({ refreshToken }) => {
+						// Store Refresh token in local storage for persistant authorization
+						localStorage.setItem(
+							"dropboxRefreshToken",
+							refreshToken,
+						);
+						this.dropboxProvider.getUserInfo();
+					});
 				pubsub.publish("authorization-success");
 			},
 		);

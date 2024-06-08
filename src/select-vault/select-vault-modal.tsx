@@ -3,7 +3,7 @@ import { Root, createRoot } from "react-dom/client";
 import { StrictMode, useState } from "react";
 
 import type ObsidianDropboxConnect from "../main";
-import { PubSub } from "../pubsub";
+import { PubSub } from "../../lib/pubsub";
 import { SelectVaultProvider, useSelectVault } from "./context-provider";
 
 export class VaultSelectModal extends Modal {
@@ -87,7 +87,7 @@ const TableControl: React.FC = () => {
 
 const TableBreadcrumb: React.FC = () => {
 	const { state, dispatch } = useSelectVault();
-	console.log("breadcrumbs", state.path);
+	//console.log("breadcrumbs", state.path);
 	if (!state.path.length) return null;
 
 	return (

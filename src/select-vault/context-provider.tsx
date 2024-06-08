@@ -1,25 +1,20 @@
 import { createContext, useReducer, useEffect, useContext } from "react";
-import { files, DropboxResponse } from "dropbox";
+import type { Folder } from "../types";
 
 type SelectVaultContextType = {
 	state: State;
 	dispatch: React.Dispatch<Action>;
 	setVaultInSettings: (path: string) => void;
-	addFolder: (
-		path: string,
-	) => Promise<DropboxResponse<files.CreateFolderResult>>;
+	addFolder: (path: string) => Promise<void>;
 };
+
 const SelectVaultContext = createContext<SelectVaultContextType | undefined>(
 	undefined,
 );
 
 type State = {
 	path: string[];
-	folders: (
-		| files.FileMetadataReference
-		| files.FolderMetadataReference
-		| files.DeletedMetadataReference
-	)[];
+	folders: Folder[];
 	isAddFolderDisplayed: boolean;
 	isLoading: boolean;
 };
@@ -30,11 +25,7 @@ type Action =
 	| {
 			type: "SET_FOLDERS";
 			payload: {
-				folders: (
-					| files.FileMetadataReference
-					| files.FolderMetadataReference
-					| files.DeletedMetadataReference
-				)[];
+				folders: Folder[];
 			};
 	  }
 	| { type: "ADD_FOLDER"; payload: { folderName: string } }
@@ -80,12 +71,8 @@ const reducer = (state: State, action: Action) => {
 interface SelectVaultProviderProps {
 	currentPath: string | undefined;
 	children: React.ReactNode;
-	listFolders: (
-		args: files.ListFolderArg,
-	) => Promise<void | DropboxResponse<files.ListFolderResult>>;
-	addFolder: (
-		path: string,
-	) => Promise<DropboxResponse<files.CreateFolderResult>>;
+	listFolders: (root: string) => Promise<Folder[]>;
+	addFolder: (path: string) => Promise<void>;
 	setVaultInSettings: (path: string) => void;
 }
 
@@ -104,22 +91,17 @@ export const SelectVaultProvider: React.FC<SelectVaultProviderProps> = ({
 	});
 
 	useEffect(() => {
-		console.log("state.path:", state.path);
 		dispatch({ type: "SET_IS_LOADING" });
-		listFolders({
-			path: state.path.length ? "/" + state.path.join("/") : "",
-		}).then((res) => {
-			if (res) {
-				const folders = res.result.entries.filter(
-					(entry) => entry[".tag"] === "folder",
-				);
-				console.log("folders:", folders);
-				dispatch({
-					type: "SET_FOLDERS",
-					payload: { folders: folders },
-				});
-			}
-		});
+		listFolders(state.path.length ? "/" + state.path.join("/") : "").then(
+			(folders) => {
+				if (folders) {
+					dispatch({
+						type: "SET_FOLDERS",
+						payload: { folders: folders },
+					});
+				}
+			},
+		);
 	}, [state.path]);
 
 	return (

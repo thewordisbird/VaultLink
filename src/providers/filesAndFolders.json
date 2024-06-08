@@ -1,0 +1,55 @@
+{
+	"result": {
+		"entries": [
+			{
+				".tag": "folder",
+				"name": "Public",
+				"path_lower": "/public",
+				"path_display": "/Public",
+				"id": "id:KxbZKPD9c0oAAAAAAAAAKQ"
+			},
+			{
+				".tag": "folder",
+				"name": "userA_vault",
+				"path_lower": "/userA_vault",
+				"path_display": "/userA_vault",
+				"id": "id:KxbZKPD9c0oAAAAAAAQmcA"
+			},
+			{
+				".tag": "folder",
+				"name": "userB_vault",
+				"path_lower": "/userB_vault",
+				"path_display": "/userB_vault",
+				"id": "id:KxbZKPD9c0oAAAAAAAQmcg"
+			},
+			{
+				".tag": "file",
+				"name": "MyNotes.txt",
+				"path_lower": "/mynotes.txt",
+				"path_display": "/MyNotes.txt",
+				"id": "id:KxbZKPD9c0oAAAAAAAOTMQ",
+				"client_modified": "2023-10-27T15:06:15Z",
+				"server_modified": "2023-10-27T15:06:15Z",
+				"rev": "608b407a6a0e300dc1b2c",
+				"size": 1621,
+				"is_downloadable": true,
+				"content_hash": "ec4760abd5e72833263c93090f377706bbaf7a811b8634f23eb257bc819f7e12"
+			},
+			{
+				".tag": "file",
+				"name": "OtherNotes.txt",
+				"path_lower": "/othernotes.txt",
+				"path_display": "/OtherNotes.txt",
+				"id": "id:KxbZKPD9c0oAAAAAAAOWkQ",
+				"client_modified": "2023-10-27T15:08:16Z",
+				"server_modified": "2023-10-27T15:08:16Z",
+				"rev": "608b40edf38c200dc1b2c",
+				"size": 776,
+				"is_downloadable": true,
+				"content_hash": "cb898ea03027072e4a1822e3f616f7b93eea63617a2ec7cd903b2dd200fbb0dd"
+			}
+		],
+		"cursor": "AAGVX55UzmWLe9Fxizat-dOZDAXUta4A4TIpUUwrLLn61d-NDnv1mXjQDHCmAeDDZvbnVIsLzrOHOXUAcLHJRTsIXBcvHC-tuqvGiVgo5FNDF8ZPu2uR1VspxyvrlhZIgZKIVgqOABl95pd5XJXrP-vKPT4kvF4Hu7ywH0lWelgZ4KRTZuWcBRCP66-PEJP8FA3X_s8jiyT_D9vO-CWNJ45heROEQZvwmj6FMme3TIqcI0fK7nFzpF8Dj-kCEBf3Da1LgQgV_x8a-ODUM6dEFVODBs-jgUxkFFntKdLLalcsks8HVqsplpRz4MyobP6NMVjy30EorDbj_AxVueaRuSl8yAQr60QgWKDT8Gp2BNez_uRGiZHyKut3bjS5vzc1rFQ",
+		"has_more": false
+	}
+}
