@@ -5,6 +5,7 @@ import {
 	CLIENT_ID,
 	DROPBOX_PROVIDER_ERRORS,
 } from "./dropboxProvider";
+
 // import type { DropboxResponse } from "dropbox";
 
 const mockAuthTokenRevoke = jest.fn();
@@ -15,11 +16,15 @@ const mockGetAccessTokenFromCode = jest.fn();
 const mockSetAccessToken = jest.fn();
 const mockSetRefreshToken = jest.fn();
 const mockRefreshAccessToken = jest.fn();
+const mockFilesListFolder = jest.fn();
+const mockFilesCreateFolderV2 = jest.fn();
 jest.mock("dropbox", () => {
 	return {
 		Dropbox: jest.fn().mockImplementation(() => {
 			return {
 				authTokenRevoke: mockAuthTokenRevoke,
+				filesListFolder: mockFilesListFolder,
+				filesCreateFolderV2: mockFilesCreateFolderV2,
 			};
 		}),
 		DropboxAuth: jest.fn().mockImplementation(() => {
@@ -328,16 +333,98 @@ describe("dropbox-provider", () => {
 			expect(mockRefreshAccessToken).toHaveBeenCalledWith();
 		});
 	});
-	/*
-	describe("listFolders", () => {
-		it("should return a list of folders from the Dropbox filesListFolder method", () => {});
-		it("should throw an error if the Dropbox filesListFolder method fails", () => {});
-	});
-	*/
 
-	/*
-	describe("addFolder", () => {});
-	*/
+	describe("listFolders", () => {
+		const FILES_LIST_FOLDERS_RESPONSE = require("./filesAndFolders.json");
+		const FOLDER_PATH = "path/to/folder";
+
+		beforeEach(() => {
+			mockFilesListFolder.mockClear();
+		});
+
+		it("should return a list of folders from the Dropbox filesListFolder method", async () => {
+			mockFilesListFolder.mockResolvedValue(FILES_LIST_FOLDERS_RESPONSE);
+
+			const db = new DropboxProvider();
+			await db.listFolders(FOLDER_PATH);
+
+			expect(mockFilesListFolder).toHaveBeenCalledWith({
+				path: FOLDER_PATH,
+			});
+		});
+		it("should return a list of the folders coerced to the type Folder", async () => {
+			mockFilesListFolder.mockResolvedValue(FILES_LIST_FOLDERS_RESPONSE);
+
+			const db = new DropboxProvider();
+			const folders = await db.listFolders(FOLDER_PATH);
+			expect(folders.length).toBe(3);
+
+			for (let folder of folders) {
+				expect(Object.keys(folder).length).toBe(3);
+				expect(Object.keys(folder)).toContain("path");
+				expect(Object.keys(folder)).toContain("displayPath");
+				expect(Object.keys(folder)).toContain("name");
+			}
+		});
+		it("should throw an error if the Dropbox filesListFolder method fails", async () => {
+			mockFilesListFolder.mockRejectedValue({
+				status: 400,
+				headers: [],
+			});
+
+			const db = new DropboxProvider();
+			let err = undefined;
+			try {
+				await db.listFolders(FOLDER_PATH);
+			} catch (e) {
+				err = e;
+			}
+			expect(err.message).toBe(
+				DROPBOX_PROVIDER_ERRORS.resourceAccessError,
+			);
+		});
+	});
+
+	describe("addFolder", () => {
+		const PATH = "path/to/new/file";
+
+		beforeEach(() => {
+			mockFilesCreateFolderV2.mockClear();
+		});
+
+		it("should make a call to the authTokenRevoke method on DropboxAuth with the path argument", async () => {
+			mockFilesCreateFolderV2.mockResolvedValue({
+				status: 200,
+				headers: [],
+			});
+
+			const db = new DropboxProvider();
+			await db.addFolder(PATH);
+
+			expect(mockFilesCreateFolderV2).toHaveBeenCalledWith({
+				path: PATH,
+			});
+		});
+
+		it("should throw an error if the Dopbox filesCreateFolderV2 method fails", async () => {
+			mockFilesCreateFolderV2.mockRejectedValue({
+				status: 400,
+				headers: [],
+			});
+
+			const db = new DropboxProvider();
+
+			let err = undefined;
+			try {
+				await db.addFolder(PATH);
+			} catch (e) {
+				err = e;
+			}
+			expect(err.message).toBe(
+				DROPBOX_PROVIDER_ERRORS.resourceAccessError,
+			);
+		});
+	});
 
 	/*
 	describe("getUserInfo", () => {});

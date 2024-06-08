@@ -87,7 +87,7 @@ const TableControl: React.FC = () => {
 
 const TableBreadcrumb: React.FC = () => {
 	const { state, dispatch } = useSelectVault();
-	console.log("breadcrumbs", state.path);
+	//console.log("breadcrumbs", state.path);
 	if (!state.path.length) return null;
 
 	return (

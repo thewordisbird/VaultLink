@@ -1,4 +1,5 @@
 import { Dropbox, DropboxAuth, DropboxResponse, files } from "dropbox";
+import type { Folder } from "./types";
 
 type DropboxAccount = {
 	accountId: string;
@@ -15,6 +16,8 @@ export const CLIENT_ID = "vofawt4jgywrgey";
 export const DROPBOX_PROVIDER_ERRORS = {
 	authenticationError: "Auth Error: Unable to authenticate with dropbox",
 	revocationError: "Revokeation Error: Unable to revoke dropbox token",
+	resourceAccessError:
+		"Resource Access Error: Unable to access Drpobox resource",
 };
 
 export class DropboxProvider {
@@ -104,18 +107,38 @@ export class DropboxProvider {
 	}
 	/* End Authentication and Authorization */
 
-	listFolders(
-		args: files.ListFolderArg,
-	): Promise<void | DropboxResponse<files.ListFolderResult>> {
+	listFolders(root = ""): Promise<Folder[]> {
 		return this.dropbox
-			.filesListFolder(args)
-			.catch((error) => console.error(error));
+			.filesListFolder({ path: root })
+			.then((res) => {
+				return res.result.entries
+					.filter((entry) => entry[".tag"] === "folder")
+					.map((folder) => {
+						return {
+							name: folder.name,
+							path: folder.path_lower,
+							displayPath: folder.path_display,
+						} as Folder;
+					});
+			})
+			.catch((_e: any) => {
+				throw new Error(DROPBOX_PROVIDER_ERRORS.resourceAccessError);
+			});
 	}
 
-	addFolder(
-		path: string,
-	): Promise<DropboxResponse<files.CreateFolderResult>> {
-		return this.dropbox.filesCreateFolderV2({ path });
+	addFolder(path: string) {
+		return new Promise<void>((resolve, reject) => {
+			this.dropbox
+				.filesCreateFolderV2({ path })
+				.then(function () {
+					resolve();
+				})
+				.catch(function () {
+					reject(
+						new Error(DROPBOX_PROVIDER_ERRORS.resourceAccessError),
+					);
+				});
+		});
 	}
 
 	getUserInfo(): Promise<void> {
