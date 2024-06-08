@@ -142,14 +142,16 @@ export class DropboxProvider {
 	}
 
 	getUserInfo(): Promise<void> {
-		const dropbox = new Dropbox({
-			auth: this.dropboxAuth,
-		});
-		return dropbox.usersGetCurrentAccount().then((response) => {
-			this.state.account = {
-				accountId: response.result.account_id,
-				email: response.result.email,
-			};
-		});
+		return this.dropbox
+			.usersGetCurrentAccount()
+			.then((response) => {
+				this.state.account = {
+					accountId: response.result.account_id,
+					email: response.result.email,
+				};
+			})
+			.catch((_e: any) => {
+				throw new Error(DROPBOX_PROVIDER_ERRORS.resourceAccessError);
+			});
 	}
 }

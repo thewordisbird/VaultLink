@@ -18,6 +18,7 @@ const mockSetRefreshToken = jest.fn();
 const mockRefreshAccessToken = jest.fn();
 const mockFilesListFolder = jest.fn();
 const mockFilesCreateFolderV2 = jest.fn();
+const mockUsersGetCurrentAccount = jest.fn();
 jest.mock("dropbox", () => {
 	return {
 		Dropbox: jest.fn().mockImplementation(() => {
@@ -25,6 +26,7 @@ jest.mock("dropbox", () => {
 				authTokenRevoke: mockAuthTokenRevoke,
 				filesListFolder: mockFilesListFolder,
 				filesCreateFolderV2: mockFilesCreateFolderV2,
+				usersGetCurrentAccount: mockUsersGetCurrentAccount,
 			};
 		}),
 		DropboxAuth: jest.fn().mockImplementation(() => {
@@ -392,7 +394,7 @@ describe("dropbox-provider", () => {
 			mockFilesCreateFolderV2.mockClear();
 		});
 
-		it("should make a call to the authTokenRevoke method on DropboxAuth with the path argument", async () => {
+		it("should make a call to the filesCreateFolderV2 method on DropboxAuth with the path argument", async () => {
 			mockFilesCreateFolderV2.mockResolvedValue({
 				status: 200,
 				headers: [],
@@ -426,7 +428,65 @@ describe("dropbox-provider", () => {
 		});
 	});
 
-	/*
-	describe("getUserInfo", () => {});
-	*/
+	describe("getUserInfo", () => {
+		const TEST_ACCOUNT_INFO = {
+			account_id: "abcm123",
+			email: "email@test.com",
+		};
+
+		const USER_GET_CURRENT_ACCOUNT_RESPONSE = {
+			result: TEST_ACCOUNT_INFO,
+		};
+
+		beforeEach(() => {
+			mockUsersGetCurrentAccount.mockClear();
+		});
+
+		it("should make a call to the userGetCurrentAccount method on DropboxAuth with the path argument", async () => {
+			mockUsersGetCurrentAccount.mockResolvedValue(
+				USER_GET_CURRENT_ACCOUNT_RESPONSE,
+			);
+
+			const db = new DropboxProvider();
+			await db.getUserInfo();
+
+			expect(mockUsersGetCurrentAccount).toHaveBeenCalled();
+		});
+
+		it("should set the accountId and email as state in the DropboxProvider instance", async () => {
+			mockUsersGetCurrentAccount.mockResolvedValue(
+				USER_GET_CURRENT_ACCOUNT_RESPONSE,
+			);
+
+			const db = new DropboxProvider();
+			expect(db.state).toEqual({});
+
+			await db.getUserInfo();
+			expect(db.state).toEqual({
+				account: {
+					accountId: TEST_ACCOUNT_INFO.account_id,
+					email: TEST_ACCOUNT_INFO.email,
+				},
+			});
+		});
+
+		it("should throw an error if the Dopbox usersGetCurrentAcount  method fails", async () => {
+			mockUsersGetCurrentAccount.mockRejectedValue({
+				status: 400,
+				headers: [],
+			});
+
+			const db = new DropboxProvider();
+
+			let err = undefined;
+			try {
+				await db.getUserInfo();
+			} catch (e) {
+				err = e;
+			}
+			expect(err.message).toBe(
+				DROPBOX_PROVIDER_ERRORS.resourceAccessError,
+			);
+		});
+	});
 });
