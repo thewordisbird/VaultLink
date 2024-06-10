@@ -1,7 +1,7 @@
 import { App, Setting, PluginSettingTab } from "obsidian";
 import ObsidianDropboxConnect from "./main";
-import { PubSub } from "../lib/pubsub";
-import { VaultSelectModal } from "./select-vault";
+import { PubSub } from "../../lib/pubsub";
+import { SelectVaultModal } from "./select-vault-modal";
 
 export interface PluginSettings {
 	provider?: "dropbox";
@@ -105,7 +105,7 @@ export class SettingsTab extends PluginSettingTab {
 			)
 			.addButton((button) =>
 				button.setButtonText("Select Folder").onClick(() => {
-					new VaultSelectModal(this.app, this.plugin).open();
+					new SelectVaultModal(this.app, this.plugin).open();
 				}),
 			)
 			.then((setting) => {

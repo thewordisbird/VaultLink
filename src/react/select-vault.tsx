@@ -1,64 +1,40 @@
-import { App, Modal } from "obsidian";
-import { Root, createRoot } from "react-dom/client";
 import { StrictMode, useState } from "react";
+import {
+	SelectVaultProvider,
+	useSelectVault,
+} from "./select-vault-context-provider";
 
-import type ObsidianDropboxConnect from "../main";
-import { PubSub } from "../../lib/pubsub";
-import { SelectVaultProvider, useSelectVault } from "./context-provider";
+import type { Folder } from "../types";
 
-export class VaultSelectModal extends Modal {
-	plugin: ObsidianDropboxConnect;
-	root: Root | null = null;
-	pubsub: PubSub;
-
-	constructor(app: App, plugin: ObsidianDropboxConnect) {
-		super(app);
-		this.plugin = plugin;
-		this.pubsub = new PubSub();
-	}
-
-	async onOpen() {
-		/* TODO: The dropbox provider should be a singleton so these can be called where needed */
-		const listFolders = this.plugin.dropboxProvider.listFolders.bind(
-			this.plugin.dropboxProvider,
-		) as typeof this.plugin.dropboxProvider.listFolders;
-
-		const addFolder = this.plugin.dropboxProvider.addFolder.bind(
-			this.plugin.dropboxProvider,
-		) as typeof this.plugin.dropboxProvider.addFolder;
-
-		const setVaultInSettings = (path: string) => {
-			this.pubsub.publish("set-vault-path", { payload: path });
-			this.close();
-		};
-		/* END TODO */
-
-		this.contentEl.style.height = "35vh";
-		const rootElm = this.contentEl.createEl("div");
-		rootElm.id = "react-root";
-
-		this.root = createRoot(rootElm);
-		this.root.render(
-			<StrictMode>
-				<SelectVaultProvider
-					currentPath={this.plugin.settings.cloudVaultPath}
-					listFolders={listFolders}
-					addFolder={addFolder}
-					setVaultInSettings={setVaultInSettings}
-				>
-					<TableControl />
-					<TableBreadcrumb />
-					<TableCurrentLocation />
-					<TableBody />
-				</SelectVaultProvider>
-			</StrictMode>,
-		);
-	}
-
-	async onClose() {
-		this.root?.unmount();
-	}
+interface SelectVaultProps {
+	currentPath: string | undefined;
+	listFolders: () => Promise<Folder[]>;
+	addFolder: (path: string) => Promise<void>;
+	setVaultInSettings: (path: string) => void;
 }
+
+const SelectVault: React.FC<SelectVaultProps> = ({
+	currentPath,
+	listFolders,
+	addFolder,
+	setVaultInSettings,
+}) => {
+	return (
+		<StrictMode>
+			<SelectVaultProvider
+				currentPath={currentPath}
+				listFolders={listFolders}
+				addFolder={addFolder}
+				setVaultInSettings={setVaultInSettings}
+			>
+				<TableControl />
+				<TableBreadcrumb />
+				<TableCurrentLocation />
+				<TableBody />
+			</SelectVaultProvider>
+		</StrictMode>
+	);
+};
 
 const TableControl: React.FC = () => {
 	const { state, dispatch, setVaultInSettings } = useSelectVault();
@@ -214,3 +190,5 @@ const TableBody: React.FC = () => {
 		</div>
 	);
 };
+
+export default SelectVault;
