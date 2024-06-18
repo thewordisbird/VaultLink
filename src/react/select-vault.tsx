@@ -36,12 +36,12 @@ const SelectVault: React.FC<SelectVaultProps> = ({
 	);
 };
 
-const TableControl: React.FC = () => {
+export const TableControl: React.FC = () => {
 	const { state, dispatch, setVaultInSettings } = useSelectVault();
 
 	return (
 		<div className="control-container">
-			<h1>Select Vault</h1>
+			<h1>Select vault</h1>
 			<div className="control-btn-container">
 				<button
 					disabled={state.isAddFolderDisplayed}
@@ -61,13 +61,12 @@ const TableControl: React.FC = () => {
 	);
 };
 
-const TableBreadcrumb: React.FC = () => {
+export const TableBreadcrumb: React.FC = () => {
 	const { state, dispatch } = useSelectVault();
-	//console.log("breadcrumbs", state.path);
 	if (!state.path.length) return null;
 
 	return (
-		<div>
+		<nav aria-label="Breadcrumb">
 			<TextLink onClick={() => dispatch({ type: "RESET_VAULT_PATH" })}>
 				All folders
 			</TextLink>
@@ -90,11 +89,11 @@ const TableBreadcrumb: React.FC = () => {
 					</>
 				);
 			})}
-		</div>
+		</nav>
 	);
 };
 
-const TableCurrentLocation: React.FC = () => {
+export const TableCurrentLocation: React.FC = () => {
 	const [folderName, setFolderName] = useState("");
 	const { state, dispatch, addFolder } = useSelectVault();
 
@@ -147,7 +146,7 @@ interface TextLinkProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
 	children: string;
 }
 
-const TextLink: React.FC<TextLinkProps> = ({ children, ...props }) => {
+export const TextLink: React.FC<TextLinkProps> = ({ children, ...props }) => {
 	return (
 		<button type="button" className="btn-text-link" onClick={props.onClick}>
 			{children}
@@ -155,10 +154,13 @@ const TextLink: React.FC<TextLinkProps> = ({ children, ...props }) => {
 	);
 };
 
-const TableBody: React.FC = () => {
+/*
+ * note: The type for name on Folder is string | undefined as it comes form
+ * Dropbox. It appears as there is no way to have an unamed folder so
+ * using the non-null assertion should be ok
+ */
+export const TableBody: React.FC = () => {
 	const { state, dispatch } = useSelectVault();
-
-	if (!state.folders) return null;
 
 	if (state.isLoading) return <h3>Loading...</h3>;
 	if (!state.folders.length) return <h3>No sub-folders</h3>;
@@ -169,19 +171,19 @@ const TableBody: React.FC = () => {
 					{state.folders.map((folder, idx) => (
 						<tr
 							className={`table-row ${idx % 2 == 0 ? "table-alt-row" : ""}`}
-							key={(folder as any).id}
+							key={folder.path}
 						>
 							<td
 								onClick={() =>
 									dispatch({
 										type: "SET_VAULT_PATH",
 										payload: {
-											path: [...state.path, folder.name],
+											path: [...state.path, folder.name!],
 										},
 									})
 								}
 							>
-								{folder.name}
+								{folder.name!}
 							</td>
 						</tr>
 					))}

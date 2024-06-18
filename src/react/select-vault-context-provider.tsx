@@ -91,6 +91,7 @@ export const SelectVaultProvider: React.FC<SelectVaultProviderProps> = ({
 	});
 
 	useEffect(() => {
+		// TODO: handle error state: should set folders to empty array and display error message
 		dispatch({ type: "SET_IS_LOADING" });
 		listFolders(state.path.length ? "/" + state.path.join("/") : "").then(
 			(folders) => {
