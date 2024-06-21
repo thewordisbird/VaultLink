@@ -1,3 +1,4 @@
+import { vi, describe, it, beforeEach, expect } from "vitest";
 import { Dropbox, DropboxAuth } from "dropbox";
 import {
 	DropboxProvider,
@@ -7,20 +8,20 @@ import {
 
 // import type { DropboxResponse } from "dropbox";
 
-const mockAuthTokenRevoke = jest.fn();
-const mockGetAuthenticationUrl = jest.fn();
-const mockGetCodeVerifier = jest.fn();
-const mockSetCodeVerifier = jest.fn();
-const mockGetAccessTokenFromCode = jest.fn();
-const mockSetAccessToken = jest.fn();
-const mockSetRefreshToken = jest.fn();
-const mockRefreshAccessToken = jest.fn();
-const mockFilesListFolder = jest.fn();
-const mockFilesCreateFolderV2 = jest.fn();
-const mockUsersGetCurrentAccount = jest.fn();
-jest.mock("dropbox", () => {
+const mockAuthTokenRevoke = vi.fn();
+const mockGetAuthenticationUrl = vi.fn();
+const mockGetCodeVerifier = vi.fn();
+const mockSetCodeVerifier = vi.fn();
+const mockGetAccessTokenFromCode = vi.fn();
+const mockSetAccessToken = vi.fn();
+const mockSetRefreshToken = vi.fn();
+const mockRefreshAccessToken = vi.fn();
+const mockFilesListFolder = vi.fn();
+const mockFilesCreateFolderV2 = vi.fn();
+const mockUsersGetCurrentAccount = vi.fn();
+vi.mock("dropbox", () => {
 	return {
-		Dropbox: jest.fn().mockImplementation(() => {
+		Dropbox: vi.fn().mockImplementation(() => {
 			return {
 				authTokenRevoke: mockAuthTokenRevoke,
 				filesListFolder: mockFilesListFolder,
@@ -28,7 +29,7 @@ jest.mock("dropbox", () => {
 				usersGetCurrentAccount: mockUsersGetCurrentAccount,
 			};
 		}),
-		DropboxAuth: jest.fn().mockImplementation(() => {
+		DropboxAuth: vi.fn().mockImplementation(() => {
 			return {
 				getAuthenticationUrl: mockGetAuthenticationUrl,
 				getCodeVerifier: mockGetCodeVerifier,
@@ -41,8 +42,8 @@ jest.mock("dropbox", () => {
 		}),
 	};
 });
-const mockDropbox = jest.mocked(Dropbox);
-const mockDropboxAuth = jest.mocked(DropboxAuth);
+const mockDropbox = vi.mocked(Dropbox);
+const mockDropboxAuth = vi.mocked(DropboxAuth);
 
 beforeEach(() => {
 	mockDropbox.mockClear();

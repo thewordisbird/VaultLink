@@ -1,4 +1,4 @@
-import { StrictMode, useState } from "react";
+import { StrictMode, useState, useEffect } from "react";
 import {
 	SelectVaultProvider,
 	useSelectVault,
@@ -193,4 +193,14 @@ export const TableBody: React.FC = () => {
 	);
 };
 
+export const MockMe: React.FC = () => {
+	const [state, setState] = useState("");
+	const { addFolder } = useSelectVault();
+
+	useEffect(() => {
+		addFolder("/new_folder").then(() => setState("Folder Added"));
+	}, []);
+
+	return <h1>{state}</h1>;
+};
 export default SelectVault;

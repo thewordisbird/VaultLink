@@ -1,3 +1,4 @@
+import { describe, it, afterEach, expect } from "vitest";
 import { PubSub } from "./pubsub";
 
 afterEach(() => {

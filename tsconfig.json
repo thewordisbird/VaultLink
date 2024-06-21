@@ -20,9 +20,9 @@
       "ES7"
     ],
 	"jsx": "react-jsx"
-
   },
   "include": [
-    "**/*.ts", "**/*.tsx"
+    "**/*.ts", "**/*.tsx",
+	"./vitest-setup.ts"
   ]
 }

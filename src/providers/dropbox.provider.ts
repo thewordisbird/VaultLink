@@ -20,12 +20,16 @@ export const DROPBOX_PROVIDER_ERRORS = {
 		"Resource Access Error: Unable to access Drpobox resource",
 };
 
+let instance: DropboxProvider | undefined;
+
 export class DropboxProvider {
 	dropbox: Dropbox;
 	dropboxAuth: DropboxAuth;
 	state = {} as DropboxState;
 
 	constructor() {
+		if (instance) return instance;
+
 		this.dropboxAuth = new DropboxAuth({
 			clientId: CLIENT_ID,
 		});
@@ -33,6 +37,9 @@ export class DropboxProvider {
 		this.dropbox = new Dropbox({
 			auth: this.dropboxAuth,
 		});
+
+		instance = this;
+		return instance;
 	}
 
 	/* Start Authentication and Authorization */

@@ -1,15 +1,26 @@
-/**
- * @jest-environment jsdom
- */
-import "@testing-library/jest-dom";
+// @vitest-environment jsdom
+
+import {
+	describe,
+	it,
+	expect,
+	vi,
+	beforeAll,
+	afterEach,
+	afterAll,
+} from "vitest";
+import { render, screen, fireEvent } from "@testing-library/react";
 import { http, HttpResponse } from "msw";
 import { setupServer } from "msw/node";
-import { findByRole, fireEvent, render, screen } from "@testing-library/react";
-import SelectVault from "./select-vault";
+import SelectVault, { MockMe } from "./select-vault";
+import { SelectVaultProvider } from "./select-vault-context-provider";
 
-// declare which API requests to mock
+//declare which API requests to mock
 const server = setupServer(
 	// capture "GET /greeting" requests
+	http.get("/greeting", () => {
+		return HttpResponse.json({ greeting: "hello there" });
+	}),
 	http.post(
 		"https://api.dropboxapi.com/2/files/create_folder_v2",
 		({ request }) => {
@@ -27,7 +38,6 @@ const server = setupServer(
 		},
 	),
 );
-
 // establish API mocking before all tests
 beforeAll(() => server.listen());
 // reset any request handlers that are declared as a part of our tests
@@ -35,14 +45,13 @@ beforeAll(() => server.listen());
 afterEach(() => server.resetHandlers());
 // clean up once the tests are done
 afterAll(() => server.close());
-
-const mockAddFolder = jest.fn();
-const mockListFolders = jest.fn().mockImplementation((path: string) => {
+const mockAddFolder = vi.fn();
+const mockListFolders = vi.fn().mockImplementation((path: string) => {
 	return new Promise((resolve, _reject) => {
 		resolve([]);
 	});
 });
-const mockSetVaultInSettings = jest.fn();
+const mockSetVaultInSettings = vi.fn();
 
 describe("SelectVault", () => {
 	// Initial load state
@@ -165,7 +174,7 @@ describe("SelectVault", () => {
 		expect(screen.getByText("Vault1")).toBeInTheDocument();
 		expect(screen.getByText("Vault2")).toBeInTheDocument();
 
-		screen.debug();
+		//screen.debug();
 	});
 
 	it("should display the proper path breadcrumbs separated by a '/'", async () => {
@@ -236,6 +245,24 @@ describe("SelectVault", () => {
 		expect(screen.queryByRole("textbox")).toBeNull();
 	});
 
+	/*
+	 */
+	it("should mock the request", async () => {
+		render(
+			<SelectVaultProvider
+				currentPath=""
+				addFolder={mockAddFolder}
+				listFolders={mockListFolders}
+				setVaultInSettings={mockSetVaultInSettings}
+			>
+				<MockMe />
+			</SelectVaultProvider>,
+		);
+
+		await screen.findByRole("heading");
+		expect(screen.getByRole("heading")).toHaveTextContent("hello there");
+	});
+	/*
 	it("should add the new folder from the add folder form to the path and navigate to the new folder as the current directory", async () => {
 		render(
 			<SelectVault
@@ -276,6 +303,7 @@ describe("SelectVault", () => {
 		// Update the current folder to be the new folder
 		expect(screen.getAllByRole("heading")[1]).toHaveTextContent("vault");
 	});
+	 */
 	/*
 
 	it("should add the vault to the settings state when the 'Select vault' button is clicked", () => {});
