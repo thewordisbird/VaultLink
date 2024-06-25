@@ -5,111 +5,9 @@ import {
 	it,
 	expect,
 	//vi,
-	beforeAll,
-	afterEach,
-	afterAll,
 } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
-import { http, HttpResponse } from "msw";
-import { setupServer } from "msw/node";
-import SelectVault, { MockMe } from "./select-vault";
-import { Dropbox, DropboxAuth } from "dropbox";
-
-//declare which API requests to mock
-const server = setupServer(
-	http.post(`https://api.dropboxapi.com/oauth2/token`, () => {
-		return HttpResponse.json({
-			access_token: "mock_access_token",
-			token_type: "bearer",
-			expires_in: 14400,
-			refresh_token: "mock_refresh_token",
-			scope: "account_info.read files.content.read files.content.write files.metadata.read files.metadata.write",
-			uid: "12345678",
-			account_id: "dbid:mock_account_id",
-		});
-	}),
-
-	http.post("https://api.dropboxapi.com/2/files/list_folder", () => {
-		return HttpResponse.json({
-			entries: [
-				{
-					".tag": "folder",
-					name: "Public",
-					path_lower: "/public",
-					path_display: "/Public",
-					id: "id:KxbZKPD9c0oAAAAAAAAAKQ",
-				},
-				{
-					".tag": "folder",
-					name: "Apps",
-					path_lower: "/apps",
-					path_display: "/Apps",
-					id: "id:KxbZKPD9c0oAAAAAAAAABA",
-				},
-				{
-					".tag": "folder",
-					name: "Documents",
-					path_lower: "/documents",
-					path_display: "/Documents",
-					id: "id:KxbZKPD9c0oAAAAAAAAcKA",
-				},
-			],
-			cursor: "AAHQi9gtdxNn17FKD_7x4d0II06FD0_RSKkt5ZZxQCMWE4Q1bbxmcWp3nSJHFK4DxvXZBiT0JVL2p2n6d2B1kKPrMX20oW8cu4D2O76ly-6OcVusZrfuH2MaI7ESbtP4kdwEA4ThbcIXJ-p2vJL5uIZ1vbsPNW0Ep1SKOn0eUH5bHbUcfOAjaLaYKSdM9C8YEe8z0jM0jVUpWjIBewlLVTh_ksYr_GpeMUI-wdzB2WgNnZ5CASGXmTmXO2QaJvHW9RGanMly4hDyT78slem1WsIhESqWL4Nt0P5FSjSK3kXvFka1SQ3GQteAMksuCz_f47q9yz3yGnVkHJ_HdLXS5IAt7VGUreyCzMRxhBqPsc93iEvQc9JRySwC_kRc2tjVe7I",
-			has_more: false,
-		});
-	}),
-);
-
-server.events.on("request:start", ({ request }) => {
-	console.log("Outgoing:", request.method, request.url);
-});
-
-const redirectUri = "mock_redirect_uri";
-const authCode = "mock_authorization_code";
-
-const dropboxAuth = new DropboxAuth({
-	clientId: "12345678",
-});
-const dropbox = new Dropbox({
-	auth: dropboxAuth,
-});
-
-async function authorizeDropbox() {
-	// setup dropboxAuth with PKCE code and code verifier
-	await dropboxAuth
-		.getAuthenticationUrl(
-			redirectUri, // redirectUri
-			undefined, // state
-			"code", // authType
-			"offline", // tokenAccessType
-			undefined, // scope
-			undefined, // includeGrantedScopes
-			true, // usePKCE
-		)
-		// @ts-ignore
-		.catch((e) => {
-			console.error(`ERROR - dropboxAuth.getAuthenticationUrl: ${e}`);
-		});
-
-	await dropboxAuth
-		.getAccessTokenFromCode(redirectUri, authCode)
-		// @ts-ignore
-		.then(({ result: { access_token, refresh_token } }) => {
-			dropboxAuth.setAccessToken(access_token);
-			dropboxAuth.setRefreshToken(refresh_token);
-		})
-		// @ts-ignore
-		.catch((e) => {
-			console.error(`ERROR - dropboxAuth.getAccessTokenFromCode ${e}`);
-		});
-}
-
-beforeAll(async () => {
-	server.listen();
-	await authorizeDropbox();
-});
-afterEach(() => server.resetHandlers());
-afterAll(() => server.close());
+import SelectVault from "./select-vault";
 
 describe("SelectVault", () => {
 	// Initial load state
@@ -168,6 +66,49 @@ describe("SelectVault", () => {
 		expect(screen.getAllByRole("heading")[1]).toHaveTextContent("vault");
 	});
 
+	it("should display the 'Add folder' form when the 'Add folder' button is clicked and disable the 'Add folder' and 'Select vault' buttons", async () => {
+		render(<SelectVault currentPath="" />);
+
+		await screen.findAllByRole("button");
+		// The form should not be visibile
+		expect(screen.queryByRole("textbox")).toBeNull();
+
+		const addFolderButton = screen.getByText("Add folder");
+		fireEvent.click(addFolderButton);
+
+		expect(screen.getByRole("textbox")).toBeInTheDocument();
+
+		expect(screen.getByText("Save")).toHaveRole("button");
+		expect(screen.getByText("Save")).toHaveClass("mod-cta"); // 'Add folder' button is secondary
+
+		expect(screen.getByText("Cancel")).toHaveRole("button");
+
+		expect(screen.getAllByRole("button")[0]).toBeDisabled(); // 'Add folder' button;
+		expect(screen.getAllByRole("button")[1]).toBeDisabled(); // 'Select vault' button;
+	});
+
+	it("should close the 'Add folder' form when the cancel button is clicked and the 'Add folder' and 'Select vault' buttons should be enabled", async () => {
+		render(<SelectVault currentPath="" />);
+
+		await screen.findAllByRole("button");
+
+		expect(screen.queryByRole("textbox")).toBeNull();
+
+		const addFolderButton = screen.getByText("Add folder");
+		fireEvent.click(addFolderButton);
+
+		expect(screen.queryByRole("textbox")).toBeInTheDocument();
+
+		const cancelButton = screen.getByText("Cancel");
+		fireEvent.click(cancelButton);
+
+		expect(screen.queryByRole("textbox")).toBeNull();
+	});
+
+	it("should navigate to and display the new folder in the modal", () => {
+		// TODO: The ideal solution is to mock the network layer with MSW. Acceptable solution
+		// is to mock the dropbox sdk and work on the application layer
+	});
 	/*
 	it("should display the 'Loading...' while it makes the initial request at the pre-selected path and then the query results when complete", async () => {
 		render(<SelectVault currentPath="" />);
@@ -205,61 +146,7 @@ describe("SelectVault", () => {
 		expect(screen.getAllByText("/")).toHaveLength(2);
 	});
 
-	it("should display the 'Add folder' form when the 'Add folder' button is clicked and disable the 'Add folder' and 'Select vault' buttons", async () => {
-		render(
-			<SelectVault
-				currentPath=""
-			/>,
-		);
 
-		await screen.findAllByRole("button");
-		// The form should not be visibile
-		expect(screen.queryByRole("textbox")).toBeNull();
-
-		const addFolderButton = screen.getByText("Add folder");
-		fireEvent.click(addFolderButton);
-
-		expect(screen.getByRole("textbox")).toBeInTheDocument();
-
-		expect(screen.getByText("Save")).toHaveRole("button");
-		expect(screen.getByText("Save")).toHaveClass("mod-cta"); // 'Add folder' button is secondary
-
-		expect(screen.getByText("Cancel")).toHaveRole("button");
-
-		expect(screen.getAllByRole("button")[0]).toBeDisabled(); // 'Add folder' button;
-		expect(screen.getAllByRole("button")[1]).toBeDisabled(); // 'Select vault' button;
-	});
-
-	it("should close the 'Add folder' form when the cancel button is clicked and the 'Add folder' and 'Select vault' buttons should be enabled", async () => {
-		render(
-			<SelectVault
-				currentPath=""
-			/>,
-		);
-
-		await screen.findAllByRole("button");
-
-		expect(screen.queryByRole("textbox")).toBeNull();
-
-		const addFolderButton = screen.getByText("Add folder");
-		fireEvent.click(addFolderButton);
-
-		expect(screen.queryByRole("textbox")).toBeInTheDocument();
-
-		const cancelButton = screen.getByText("Cancel");
-		fireEvent.click(cancelButton);
-
-		expect(screen.queryByRole("textbox")).toBeNull();
-	});
-
-	it("should mock the request", async () => {
-		render(<MockMe />);
-
-		//await screen.findByRole("heading");
-		await screen.findByRole("paragraph");
-		screen.debug();
-		expect(screen.getByRole("heading")).toHaveTextContent("hello there");
-	});
 	/*
 	it("should add the new folder from the add folder form to the path and navigate to the new folder as the current directory", async () => {
 		render(

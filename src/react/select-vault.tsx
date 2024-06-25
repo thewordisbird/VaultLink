@@ -39,7 +39,27 @@ const SelectVault: React.FC<SelectVaultProps> = ({ currentPath }) => {
 					})
 				}
 			/>
-			<CurrentLocation path={state.path} />
+			<CurrentLocation
+				path={state.path}
+				isAddFolderDisplayed={state.isAddFolderDisplayed}
+				handleSave={(folderName) => {
+					const folderPath = state.path.length
+						? `/${state.path.join("/")}/${folderName}`
+						: `/${folderName}`;
+
+					dropboxProvider.addFolder(folderPath).then((_res) => {
+						dispatch({
+							type: "ADD_FOLDER",
+							payload: {
+								folderName: folderPath.split("/").pop() || "",
+							},
+						});
+					});
+				}}
+				handleCancel={() => {
+					dispatch({ type: "TOGGLE_ADD_FOLDER" });
+				}}
+			/>
 			<FolderList
 				isLoading={state.isLoading}
 				folders={state.folders}
@@ -125,10 +145,47 @@ export const Breadcrumb: React.FC<BreadcrumbProps> = ({
 
 interface CurrentLocationProps {
 	path: string[];
+	isAddFolderDisplayed: boolean;
+	handleSave: (folderName: string) => void;
+	handleCancel: () => void;
 }
 
-const CurrentLocation: React.FC<CurrentLocationProps> = ({ path }) => {
-	return <h2>{!path.length ? "All folders" : path[path.length - 1]}</h2>;
+const CurrentLocation: React.FC<CurrentLocationProps> = ({
+	path,
+	isAddFolderDisplayed,
+	handleSave,
+	handleCancel,
+}) => {
+	const [folderName, setFolderName] = useState("");
+
+	return (
+		<div className="folder-current-location">
+			<h2>
+				{!path.length ? "All folders" : path[path.length - 1]}
+
+				{isAddFolderDisplayed && (
+					<span className="display-slash"> &#47; </span>
+				)}
+			</h2>
+			{isAddFolderDisplayed && (
+				<div className="add-folder-form">
+					<input
+						type="text"
+						onChange={(e) => setFolderName(e.target.value)}
+					/>
+					<div className="add-folder-form-control">
+						<button
+							className="mod-cta"
+							onClick={() => handleSave(folderName)}
+						>
+							Save
+						</button>
+						<button onClick={handleCancel}>Cancel</button>
+					</div>
+				</div>
+			)}
+		</div>
+	);
 };
 
 /*
