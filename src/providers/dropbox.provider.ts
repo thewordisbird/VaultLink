@@ -27,6 +27,10 @@ export class DropboxProvider {
 	dropboxAuth: DropboxAuth;
 	state = {} as DropboxState;
 
+	static resetInstance() {
+		instance = undefined;
+	}
+
 	constructor() {
 		if (instance) return instance;
 
@@ -128,7 +132,8 @@ export class DropboxProvider {
 						} as Folder;
 					});
 			})
-			.catch((_e: any) => {
+			.catch((e: any) => {
+				console.error("listFolders error:", e);
 				throw new Error(DROPBOX_PROVIDER_ERRORS.resourceAccessError);
 			});
 	}

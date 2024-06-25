@@ -1,4 +1,4 @@
-import { vi, describe, it, beforeEach, expect } from "vitest";
+import { vi, describe, it, beforeEach, afterEach, expect } from "vitest";
 import { Dropbox, DropboxAuth } from "dropbox";
 import {
 	DropboxProvider,
@@ -48,6 +48,10 @@ const mockDropboxAuth = vi.mocked(DropboxAuth);
 beforeEach(() => {
 	mockDropbox.mockClear();
 	mockDropboxAuth.mockClear();
+});
+
+afterEach(() => {
+	DropboxProvider.resetInstance();
 });
 
 describe("dropbox-provider", () => {

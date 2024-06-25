@@ -1,16 +1,6 @@
-import { createContext, useReducer, useEffect, useContext } from "react";
+import { useReducer, useEffect } from "react";
+import { DropboxProvider } from "../providers/dropbox.provider";
 import type { Folder } from "../types";
-
-type SelectVaultContextType = {
-	state: State;
-	dispatch: React.Dispatch<Action>;
-	setVaultInSettings: (path: string) => void;
-	addFolder: (path: string) => Promise<void>;
-};
-
-const SelectVaultContext = createContext<SelectVaultContextType | undefined>(
-	undefined,
-);
 
 type State = {
 	path: string[];
@@ -37,6 +27,7 @@ const reducer = (state: State, action: Action) => {
 		case "RESET_VAULT_PATH":
 			return { ...state, path: [] };
 		case "SET_VAULT_PATH":
+			console.log("update path:", action.payload.path);
 			return {
 				...state,
 				path: action.payload.path,
@@ -68,60 +59,35 @@ const reducer = (state: State, action: Action) => {
 	}
 };
 
-interface SelectVaultProviderProps {
-	currentPath: string | undefined;
-	children: React.ReactNode;
-	listFolders: (root: string) => Promise<Folder[]>;
-	addFolder: (path: string) => Promise<void>;
-	setVaultInSettings: (path: string) => void;
-}
+const dropboxProvider = new DropboxProvider();
 
-export const SelectVaultProvider: React.FC<SelectVaultProviderProps> = ({
-	children,
-	currentPath,
-	listFolders,
-	addFolder,
-	setVaultInSettings,
-}) => {
-	const [state, dispatch] = useReducer(reducer, {
+export function useSelectVault(
+	currentPath?: string,
+): [State, React.Dispatch<Action>] {
+	const [state, dispatch] = useReducer(reducer, null, () => ({
 		path: currentPath ? currentPath.split("/") : [],
 		folders: [],
 		isAddFolderDisplayed: false,
 		isLoading: false,
-	});
+	}));
 
 	useEffect(() => {
 		// TODO: handle error state: should set folders to empty array and display error message
 		dispatch({ type: "SET_IS_LOADING" });
-		listFolders(state.path.length ? "/" + state.path.join("/") : "").then(
-			(folders) => {
+		dropboxProvider
+			.listFolders(state.path.length ? "/" + state.path.join("/") : "")
+			.then((folders) => {
 				if (folders) {
 					dispatch({
 						type: "SET_FOLDERS",
 						payload: { folders: folders },
 					});
 				}
-			},
-		);
+			})
+			.catch((e: any) => {
+				console.error("DROPBOX PROVIDER ERROR:", e);
+			});
 	}, [state.path]);
 
-	return (
-		<SelectVaultContext.Provider
-			value={{ state, dispatch, setVaultInSettings, addFolder }}
-		>
-			{children}
-		</SelectVaultContext.Provider>
-	);
-};
-
-export const useSelectVault = () => {
-	const context = useContext(SelectVaultContext);
-
-	if (!context) {
-		throw new Error(
-			"useSelectVault must be used in the SelectVaultProvider",
-		);
-	}
-
-	return context;
-};
+	return [state, dispatch];
+}

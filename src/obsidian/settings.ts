@@ -2,6 +2,7 @@ import { App, Setting, PluginSettingTab } from "obsidian";
 import ObsidianDropboxConnect from "./main";
 import { PubSub } from "../../lib/pubsub";
 import { SelectVaultModal } from "./select-vault-modal";
+import { DropboxProvider } from "src/providers/dropbox.provider";
 
 export interface PluginSettings {
 	provider?: "dropbox";
@@ -40,8 +41,8 @@ export class SettingsTab extends PluginSettingTab {
 
 	async display() {
 		/* Everytime the setting tab is loaded check for auth? */
-		const authState =
-			await this.plugin.dropboxProvider.getAuthorizationState();
+		const dropboxProvider = new DropboxProvider();
+		const authState = await dropboxProvider.getAuthorizationState();
 
 		const { containerEl } = this;
 
@@ -64,9 +65,8 @@ export class SettingsTab extends PluginSettingTab {
 		connectDropboxButton.innerText = "Connect To Dropbox";
 		connectDropboxButton.className = "dropbox_button";
 		connectDropboxButton.onClickEvent(async () => {
-			const authUrl =
-				await this.plugin.dropboxProvider.getAuthenticationUrl();
-			const codeVerifier = this.plugin.dropboxProvider.getCodeVerifier();
+			const authUrl = await dropboxProvider.getAuthenticationUrl();
+			const codeVerifier = dropboxProvider.getCodeVerifier();
 
 			window.sessionStorage.clear();
 			window.sessionStorage.setItem("codeVerifier", codeVerifier);
@@ -85,7 +85,7 @@ export class SettingsTab extends PluginSettingTab {
 		disconnectButton.className = "dropbox_button";
 		disconnectButton.id = "dbx-btn";
 		disconnectButton.onClickEvent(() =>
-			this.plugin.dropboxProvider.revokeAuthorizationToken().then(() => {
+			dropboxProvider.revokeAuthorizationToken().then(() => {
 				localStorage.removeItem("dropboxRefreshToken");
 				cloudDisconnectSection.hide();
 				cloudConnectSection.show();

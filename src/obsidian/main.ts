@@ -6,7 +6,6 @@ import type { PluginSettings } from "./settings";
 
 export default class ObsidianDropboxConnect extends Plugin {
 	settings: PluginSettings;
-	dropboxProvider: DropboxProvider;
 
 	async onload() {
 		await this.loadSettings();
@@ -15,12 +14,12 @@ export default class ObsidianDropboxConnect extends Plugin {
 		const pubsub = new PubSub();
 
 		// Setup Dropbox Provider
-		this.dropboxProvider = new DropboxProvider();
+		const dropboxProvider = new DropboxProvider();
 
 		// Retrieve and set new access token if a valid refresh token is stored in local storage
 		const refreshToken = localStorage.getItem("dropboxRefreshToken");
 		if (refreshToken) {
-			this.dropboxProvider.authorizeWithRefreshToken(refreshToken);
+			dropboxProvider.authorizeWithRefreshToken(refreshToken);
 		}
 
 		// Set  protocol handler to catch authorization response form dropbox
@@ -34,9 +33,9 @@ export default class ObsidianDropboxConnect extends Plugin {
 					window.sessionStorage.getItem("codeVerifier");
 				// TOOD: Handle error if no code verifier in sessionStorage
 				if (!codeVerifier) throw new Error("");
-				this.dropboxProvider.setCodeVerifier(codeVerifier);
+				dropboxProvider.setCodeVerifier(codeVerifier);
 
-				this.dropboxProvider
+				dropboxProvider
 					.setAccessAndRefreshToken(protocolData.code)
 					.then(({ refreshToken }) => {
 						// Store Refresh token in local storage for persistant authorization
@@ -44,7 +43,7 @@ export default class ObsidianDropboxConnect extends Plugin {
 							"dropboxRefreshToken",
 							refreshToken,
 						);
-						this.dropboxProvider.getUserInfo();
+						dropboxProvider.getUserInfo();
 					});
 				pubsub.publish("authorization-success");
 			},
