@@ -22,7 +22,10 @@ export class SelectVaultModal extends Modal {
 
 		this.root = createRoot(rootElm);
 		this.root.render(
-			<SelectVault currentPath={this.plugin.settings.cloudVaultPath} />,
+			<SelectVault
+				currentPath={this.plugin.settings.cloudVaultPath}
+				closeModal={this.close.bind(this)}
+			/>,
 		);
 	}
 
