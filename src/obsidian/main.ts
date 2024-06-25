@@ -1,12 +1,11 @@
 import { Plugin } from "obsidian";
 import { DEFAULT_SETTINGS, SettingsTab } from "./settings";
-import { DropboxProvider } from "./dropboxProvider";
+import { DropboxProvider } from ".././providers/dropbox.provider";
+import { PubSub } from "../../lib/pubsub";
 import type { PluginSettings } from "./settings";
-import { PubSub } from "./pubsub";
 
 export default class ObsidianDropboxConnect extends Plugin {
 	settings: PluginSettings;
-	dropboxProvider: DropboxProvider;
 
 	async onload() {
 		await this.loadSettings();
@@ -15,18 +14,37 @@ export default class ObsidianDropboxConnect extends Plugin {
 		const pubsub = new PubSub();
 
 		// Setup Dropbox Provider
-		this.dropboxProvider = new DropboxProvider();
+		const dropboxProvider = new DropboxProvider();
 
 		// Retrieve and set new access token if a valid refresh token is stored in local storage
-		this.dropboxProvider.authorizeWithRefreshToken();
+		const refreshToken = localStorage.getItem("dropboxRefreshToken");
+		if (refreshToken) {
+			dropboxProvider.authorizeWithRefreshToken(refreshToken);
+		}
 
 		// Set  protocol handler to catch authorization response form dropbox
 		this.registerObsidianProtocolHandler(
 			"connect-dropbox",
 			(protocolData) => {
-				this.dropboxProvider.getAccessToken(protocolData).then(() => {
-					this.dropboxProvider.getUserInfo();
-				});
+				// TODO: Handle error if no code is available
+				if (!protocolData.code) throw new Error("");
+
+				const codeVerifier =
+					window.sessionStorage.getItem("codeVerifier");
+				// TOOD: Handle error if no code verifier in sessionStorage
+				if (!codeVerifier) throw new Error("");
+				dropboxProvider.setCodeVerifier(codeVerifier);
+
+				dropboxProvider
+					.setAccessAndRefreshToken(protocolData.code)
+					.then(({ refreshToken }) => {
+						// Store Refresh token in local storage for persistant authorization
+						localStorage.setItem(
+							"dropboxRefreshToken",
+							refreshToken,
+						);
+						dropboxProvider.getUserInfo();
+					});
 				pubsub.publish("authorization-success");
 			},
 		);

@@ -3,7 +3,11 @@ import { v4 as uuidv4 } from "uuid";
 let instance: PubSub | undefined;
 
 export class PubSub {
-	subscribers: Map<string, [string, (args: unknown) => void][]> = new Map();
+	subscribers: Map<string, Map<string, (args: unknown) => void>> = new Map();
+
+	static resetInstance() {
+		instance = undefined;
+	}
 
 	constructor() {
 		if (instance) return instance;
@@ -17,18 +21,18 @@ export class PubSub {
 		const id = uuidv4();
 
 		if (!topicSubscribers) {
-			this.subscribers.set(topic, [[id, callback]]);
+			this.subscribers.set(topic, new Map([[id, callback]]));
 		} else {
-			topicSubscribers.push([id, callback]);
+			topicSubscribers.set(id, callback);
 		}
 
 		return () => {
-			const updatedSubscribers = topicSubscribers?.filter(
-				(subscriber) => subscriber[0] !== id,
-			);
-			if (updatedSubscribers?.length) {
-				this.subscribers.set(topic, updatedSubscribers);
-			} else {
+			const subscribers = this.subscribers.get(topic);
+			if (!subscribers) return;
+
+			subscribers.delete(id);
+
+			if (subscribers.size == 0) {
 				this.subscribers.delete(topic);
 			}
 		};
@@ -36,10 +40,11 @@ export class PubSub {
 
 	publish(topic: string, payload?: any): void {
 		const topicSubscribers = this.subscribers.get(topic);
+		if (!topicSubscribers) return;
 
-		topicSubscribers?.forEach((subscriber) => {
-			subscriber[1](payload);
-		});
+		for (let [_, cb] of topicSubscribers) {
+			cb(payload);
+		}
 	}
 
 	unsubscribeAll() {}

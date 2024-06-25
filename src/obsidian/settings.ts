@@ -1,7 +1,8 @@
 import { App, Setting, PluginSettingTab } from "obsidian";
 import ObsidianDropboxConnect from "./main";
-import { PubSub } from "./pubsub";
-import { VaultSelectModal } from "./select-vault";
+import { PubSub } from "../../lib/pubsub";
+import { SelectVaultModal } from "./select-vault-modal";
+import { DropboxProvider } from "src/providers/dropbox.provider";
 
 export interface PluginSettings {
 	provider?: "dropbox";
@@ -40,9 +41,8 @@ export class SettingsTab extends PluginSettingTab {
 
 	async display() {
 		/* Everytime the setting tab is loaded check for auth? */
-		const authState =
-			await this.plugin.dropboxProvider.getAuthorizationState();
-		console.log("dropbox authorization state:", authState);
+		const dropboxProvider = new DropboxProvider();
+		const authState = await dropboxProvider.getAuthorizationState();
 
 		const { containerEl } = this;
 
@@ -64,9 +64,14 @@ export class SettingsTab extends PluginSettingTab {
 		const connectDropboxButton = cloudConnectSection.createEl("button");
 		connectDropboxButton.innerText = "Connect To Dropbox";
 		connectDropboxButton.className = "dropbox_button";
-		connectDropboxButton.onClickEvent(() =>
-			this.plugin.dropboxProvider.getAuthorizationToken(),
-		);
+		connectDropboxButton.onClickEvent(async () => {
+			const authUrl = await dropboxProvider.getAuthenticationUrl();
+			const codeVerifier = dropboxProvider.getCodeVerifier();
+
+			window.sessionStorage.clear();
+			window.sessionStorage.setItem("codeVerifier", codeVerifier);
+			window.location.href = authUrl as string;
+		});
 
 		const cloudDisconnectSection = containerEl.createEl("section");
 		cloudDisconnectSection.className = "settings_section";
@@ -80,7 +85,8 @@ export class SettingsTab extends PluginSettingTab {
 		disconnectButton.className = "dropbox_button";
 		disconnectButton.id = "dbx-btn";
 		disconnectButton.onClickEvent(() =>
-			this.plugin.dropboxProvider.revokeAuthorizationToken().then(() => {
+			dropboxProvider.revokeAuthorizationToken().then(() => {
+				localStorage.removeItem("dropboxRefreshToken");
 				cloudDisconnectSection.hide();
 				cloudConnectSection.show();
 			}),
@@ -99,7 +105,7 @@ export class SettingsTab extends PluginSettingTab {
 			)
 			.addButton((button) =>
 				button.setButtonText("Select Folder").onClick(() => {
-					new VaultSelectModal(this.app, this.plugin).open();
+					new SelectVaultModal(this.app, this.plugin).open();
 				}),
 			)
 			.then((setting) => {
