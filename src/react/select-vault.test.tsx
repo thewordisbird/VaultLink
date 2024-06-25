@@ -109,6 +109,10 @@ describe("SelectVault", () => {
 		// TODO: The ideal solution is to mock the network layer with MSW. Acceptable solution
 		// is to mock the dropbox sdk and work on the application layer
 	});
+
+	it("should set the vault in the obsidian settings state when the 'Select vault' button is clicked", () => {});
+
+	it("should make a call to the obsidian close modal method when the 'Select vault' button is clicked", () => {});
 	/*
 	it("should display the 'Loading...' while it makes the initial request at the pre-selected path and then the query results when complete", async () => {
 		render(<SelectVault currentPath="" />);

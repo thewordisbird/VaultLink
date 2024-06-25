@@ -9,9 +9,13 @@ const dropboxProvider = new DropboxProvider();
 
 interface SelectVaultProps {
 	currentPath: string | undefined;
+	closeModal: () => void;
 }
 
-const SelectVault: React.FC<SelectVaultProps> = ({ currentPath }) => {
+const SelectVault: React.FC<SelectVaultProps> = ({
+	currentPath,
+	closeModal,
+}) => {
 	const [state, dispatch] = useSelectVault(currentPath);
 
 	useEffect(() => {
@@ -23,11 +27,12 @@ const SelectVault: React.FC<SelectVaultProps> = ({ currentPath }) => {
 			<Header
 				isAddFolderDisplayed={state.isAddFolderDisplayed}
 				handleAddFolder={() => dispatch({ type: "TOGGLE_ADD_FOLDER" })}
-				handleSelectVault={() =>
+				handleSelectVault={() => {
 					pubsub.publish("set-vault-path", {
 						payload: state.path.join("/"),
-					})
-				}
+					});
+					closeModal();
+				}}
 			/>
 			<Breadcrumb
 				path={state.path}
