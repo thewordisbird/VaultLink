@@ -1,4 +1,4 @@
-import { Dropbox, DropboxAuth, DropboxResponse } from "dropbox";
+import { Dropbox, DropboxAuth, DropboxResponse, files } from "dropbox";
 import type { Folder } from "../types";
 
 type DropboxAccount = {
@@ -166,4 +166,70 @@ export class DropboxProvider {
 				throw new Error(DROPBOX_PROVIDER_ERRORS.resourceAccessError);
 			});
 	}
+
+	// Folders
+	createFolder(path: string) {
+		return new Promise<void>((resolve, reject) => {
+			this.dropbox
+				.filesCreateFolderV2({ path })
+				.then(function () {
+					resolve();
+				})
+				.catch(function () {
+					reject(
+						new Error(DROPBOX_PROVIDER_ERRORS.resourceAccessError),
+					);
+				});
+		});
+	}
+
+	renameFolder(fromPath: string, toPath: string) {
+		console.log("renameFolder");
+
+		this.dropbox
+			.filesMoveV2({ from_path: fromPath, to_path: toPath })
+			.then((res) => {
+				console.log("filesMoveV2 Res:", res);
+			})
+			.catch((e: any) => {
+				console.error("Dropbox filesMoveV2 Error:", e);
+			});
+	}
+
+	deleteFolder(path: string) {
+		this.dropbox
+			.filesDeleteV2({ path })
+			.then((res) => {
+				console.log("filesDeleteV2 Res:", res);
+			})
+			.catch((e: any) => {
+				console.error("Dropbox filesDeleteV2 Error:", e);
+			});
+	}
+
+	// Notes
+	createFile() {}
+
+	renameFile() {}
+
+	modifyFile() {}
+
+	deleteFile() {}
+
+	newNote() {}
+
+	/*
+	uploadFile(args: files.UploadArg) {
+		console.log("Upload args:", args);
+		// 150 MB max file size
+		return this.dropbox.filesUpload({
+			path: args.path,
+			contents: args.contents,
+			// mode: {
+			// 	'.tag': 'update',
+			// 	update:
+			// }
+		});
+	}
+	*/
 }
