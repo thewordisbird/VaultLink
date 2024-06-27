@@ -1,5 +1,8 @@
-type Callback<T> = (args: T[]) => void;
-export function batchProcess<A>(callback: Callback<A>, batchTime: number) {
+type BatchCallback<T> = (args: T[]) => void;
+
+// TODO: Confirm this works for callbacks that accept no params, parms that are arrays, objects,
+// or induvidual comma dilimited.
+export function batchProcess<A>(callback: BatchCallback<A>, batchTime: number) {
 	const queue: A[] = [];
 	let timeoutId: NodeJS.Timeout | null = null;
 
@@ -18,6 +21,35 @@ export function batchProcess<A>(callback: Callback<A>, batchTime: number) {
 
 		if (timeoutId) clearTimeout(timeoutId);
 		timeoutId = setTimeout(flushQueue, batchTime); // Default batch time: 1 second
+	};
+
+	// Return an object with the addToQueue function
+	return addToQueue;
+}
+
+type ThrottleCallback<T> = (args: T) => void;
+export function throttleProcess<A>(
+	callback: ThrottleCallback<A>,
+	throttleTime: number,
+) {
+	const queue: A[] = [];
+	let intervalId: NodeJS.Timer | null = null;
+
+	const flushQueue = () => {
+		intervalId = setInterval(() => {
+			if (queue.length == 0) {
+				clearInterval(intervalId!);
+				intervalId = null;
+			} else {
+				const cbArgs = queue.shift();
+				callback.call(null, cbArgs);
+			}
+		}, throttleTime);
+	};
+
+	const addToQueue = (args: A) => {
+		queue.push(args);
+		if (!intervalId) flushQueue();
 	};
 
 	// Return an object with the addToQueue function

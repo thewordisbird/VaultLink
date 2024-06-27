@@ -1,6 +1,6 @@
 import { Dropbox, DropboxAuth, DropboxResponse, files } from "dropbox";
 import { debounce } from "obsidian";
-import { batchProcess } from "src/utils";
+import { batchProcess, throttleProcess } from "src/utils";
 import type { Folder } from "../types";
 
 type DropboxAccount = {
@@ -13,6 +13,7 @@ type DropboxState = {
 };
 
 const BATCH_DELAY_TIME = 1000;
+const THROTTLE_DELAY_TIME = 500;
 
 export const REDIRECT_URI = "obsidian://connect-dropbox";
 export const CLIENT_ID = "vofawt4jgywrgey";
@@ -235,9 +236,13 @@ export class DropboxProvider {
 			});
 	}
 
-	// Notes
-	createFile(path: string, contents: ArrayBuffer) {
-		return this.dropbox
+	createFile = throttleProcess(
+		this._createFile.bind(this),
+		THROTTLE_DELAY_TIME,
+	);
+
+	private _createFile(path: string, contents: ArrayBuffer) {
+		this.dropbox
 			.filesUpload({
 				path: path,
 				contents: contents,
@@ -250,26 +255,5 @@ export class DropboxProvider {
 			});
 	}
 
-	renameFile() {}
-
 	modifyFile() {}
-
-	deleteFile() {}
-
-	newNote() {}
-
-	/*
-	uploadFile(args: files.UploadArg) {
-		console.log("Upload args:", args);
-		// 150 MB max file size
-		return this.dropbox.filesUpload({
-			path: args.path,
-			contents: args.contents,
-			// mode: {
-			// 	'.tag': 'update',
-			// 	update:
-			// }
-		});
-	}
-	*/
 }
