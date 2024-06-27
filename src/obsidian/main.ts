@@ -70,7 +70,15 @@ export default class ObsidianDropboxConnect extends Plugin {
 
 					if (folderOrFile instanceof TFile) {
 						console.log("new file created");
-						//dropboxProvider.createFile(folderOrFile);
+						this.app.vault
+							.readBinary(folderOrFile)
+							.then((contents) => {
+								if (!this.settings.cloudVaultPath) return;
+								dropboxProvider.createFile(
+									`/${this.settings.cloudVaultPath}/${folderOrFile.path}`,
+									contents,
+								);
+							});
 					}
 				}),
 			);
@@ -96,20 +104,21 @@ export default class ObsidianDropboxConnect extends Plugin {
 				*/
 			}),
 		);
-		this.registerEvent(
-			this.app.vault.on("delete", (folderOrFile) => {
-				console.log("Delete");
-				const path = `/${this.settings.cloudVaultPath}/${folderOrFile.path}`;
-				dropboxProvider.deleteFolder(path);
-			}),
-		);
 
 		this.registerEvent(
 			this.app.vault.on("rename", (folderOrFile, ctx) => {
 				const fromPath = `/${this.settings.cloudVaultPath}/${ctx}`;
 				const toPath = `/${this.settings.cloudVaultPath}/${folderOrFile.path}`;
 
-				dropboxProvider.renameFolder(fromPath, toPath);
+				dropboxProvider.renameFolderOrFile(fromPath, toPath);
+			}),
+		);
+
+		this.registerEvent(
+			this.app.vault.on("delete", (folderOrFile) => {
+				console.log("Delete\n", folderOrFile);
+				const path = `/${this.settings.cloudVaultPath}/${folderOrFile.path}`;
+				dropboxProvider.deleteFolderOrFile(path);
 			}),
 		);
 

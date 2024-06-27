@@ -1,4 +1,6 @@
 import { Dropbox, DropboxAuth, DropboxResponse, files } from "dropbox";
+import { debounce } from "obsidian";
+import { batchProcess } from "src/utils";
 import type { Folder } from "../types";
 
 type DropboxAccount = {
@@ -9,6 +11,8 @@ type DropboxAccount = {
 type DropboxState = {
 	account: DropboxAccount;
 };
+
+const BATCH_DELAY_TIME = 1000;
 
 export const REDIRECT_URI = "obsidian://connect-dropbox";
 export const CLIENT_ID = "vofawt4jgywrgey";
@@ -167,26 +171,21 @@ export class DropboxProvider {
 			});
 	}
 
-	// Folders
 	createFolder(path: string) {
-		return new Promise<void>((resolve, reject) => {
-			this.dropbox
-				.filesCreateFolderV2({ path })
-				.then(function () {
-					resolve();
-				})
-				.catch(function () {
-					reject(
-						new Error(DROPBOX_PROVIDER_ERRORS.resourceAccessError),
-					);
-				});
-		});
+		this.dropbox
+			.filesCreateFolderV2({ path })
+			.then((res) => {
+				console.log("filesCreateFolderV2 Res:", res);
+			})
+			.catch((e: any) => {
+				console.error("Dropbox filesCreateFolderV2 Error:", e);
+			});
 	}
 
-	renameFolder(fromPath: string, toPath: string) {
+	renameFolderOrFile(fromPath: string, toPath: string) {
 		console.log("renameFolder");
 
-		this.dropbox
+		return this.dropbox
 			.filesMoveV2({ from_path: fromPath, to_path: toPath })
 			.then((res) => {
 				console.log("filesMoveV2 Res:", res);
@@ -196,19 +195,40 @@ export class DropboxProvider {
 			});
 	}
 
-	deleteFolder(path: string) {
+	deleteFolderOrFile = batchProcess(
+		this._deleteFolderOfFile.bind(this),
+		BATCH_DELAY_TIME,
+	);
+
+	private _deleteFolderOfFile(paths: string[]) {
+		console.log("deleting paths:", paths);
 		this.dropbox
-			.filesDeleteV2({ path })
+			.filesDeleteBatch({ entries: paths.map((path) => ({ path })) })
 			.then((res) => {
-				console.log("filesDeleteV2 Res:", res);
+				// This returns a job id that needs to be checked to confirm
+				// if the process was successful. this will require a quing process
+				// for the plugin to continue to check if there are sync issues
+				console.log("filesDeleteBatch Res:", res);
 			})
 			.catch((e: any) => {
-				console.error("Dropbox filesDeleteV2 Error:", e);
+				console.error("Dropbox filesDeleteBatch Error:", e);
 			});
 	}
 
 	// Notes
-	createFile() {}
+	createFile(path: string, contents: ArrayBuffer) {
+		return this.dropbox
+			.filesUpload({
+				path: path,
+				contents: contents,
+			})
+			.then((res) => {
+				console.log("filesUpload Res:", res);
+			})
+			.catch((e: any) => {
+				console.error("Dropbox filesUpload Error:", e);
+			});
+	}
 
 	renameFile() {}
 
