@@ -142,6 +142,7 @@ export class DropboxProvider {
 			});
 	}
 
+	// TODO: change this to 'createFolder' to be consistent with the rest of the api.
 	addFolder(path: string) {
 		return new Promise<void>((resolve, reject) => {
 			this.dropbox
@@ -171,14 +172,24 @@ export class DropboxProvider {
 			});
 	}
 
-	createFolder(path: string) {
+	/* File and Folder Controls */
+	batchCreateFolder = batchProcess(
+		this._batchCreateFolder.bind(this),
+		BATCH_DELAY_TIME,
+	);
+
+	private _batchCreateFolder(paths: string[]) {
+		console.log("_batchDeleteFolderOrFile:", paths);
 		this.dropbox
-			.filesCreateFolderV2({ path })
+			.filesCreateFolderBatch({ paths })
 			.then((res) => {
-				console.log("filesCreateFolderV2 Res:", res);
+				// This returns a job id that needs to be checked to confirm
+				// if the process was successful. this will require a quing process
+				// for the plugin to continue to check if there are sync issues
+				console.log("filesCreateFolderBatch Res:", res);
 			})
 			.catch((e: any) => {
-				console.error("Dropbox filesCreateFolderV2 Error:", e);
+				console.error("Dropbox filesCreateFolderBatch Error:", e);
 			});
 	}
 
@@ -195,13 +206,13 @@ export class DropboxProvider {
 			});
 	}
 
-	deleteFolderOrFile = batchProcess(
-		this._deleteFolderOfFile.bind(this),
+	batchDeleteFolderOrFile = batchProcess(
+		this._batchDeleteFolderOfFile.bind(this),
 		BATCH_DELAY_TIME,
 	);
 
-	private _deleteFolderOfFile(paths: string[]) {
-		console.log("deleting paths:", paths);
+	private _batchDeleteFolderOfFile(paths: string[]) {
+		console.log("_batchDeleteFolderOrFile:", paths);
 		this.dropbox
 			.filesDeleteBatch({ entries: paths.map((path) => ({ path })) })
 			.then((res) => {

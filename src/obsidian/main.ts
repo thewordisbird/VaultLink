@@ -61,9 +61,7 @@ export default class ObsidianDropboxConnect extends Plugin {
 					console.log(folderOrFile);
 
 					if (folderOrFile instanceof TFolder) {
-						console.log("new folder created");
-
-						dropboxProvider.createFolder(
+						dropboxProvider.batchCreateFolder(
 							`/${this.settings.cloudVaultPath}/${folderOrFile.path}`,
 						);
 					}
@@ -118,7 +116,7 @@ export default class ObsidianDropboxConnect extends Plugin {
 			this.app.vault.on("delete", (folderOrFile) => {
 				console.log("Delete\n", folderOrFile);
 				const path = `/${this.settings.cloudVaultPath}/${folderOrFile.path}`;
-				dropboxProvider.deleteFolderOrFile(path);
+				dropboxProvider.batchDeleteFolderOrFile(path);
 			}),
 		);
 
