@@ -193,16 +193,25 @@ export class DropboxProvider {
 			});
 	}
 
-	renameFolderOrFile(fromPath: string, toPath: string) {
-		console.log("renameFolder");
+	batchRenameFolderOrFile = batchProcess(
+		this._batchRenameFolderOrFile.bind(this),
+		BATCH_DELAY_TIME,
+	);
 
-		return this.dropbox
-			.filesMoveV2({ from_path: fromPath, to_path: toPath })
+	private _batchRenameFolderOrFile(
+		args: { from_path: string; to_path: string }[],
+	) {
+		console.log("_batchRenameFolderOrFile:", args);
+		this.dropbox
+			.filesMoveBatchV2({ entries: args })
 			.then((res) => {
-				console.log("filesMoveV2 Res:", res);
+				// This returns a job id that needs to be checked to confirm
+				// if the process was successful. this will require a quing process
+				// for the plugin to continue to check if there are sync issues
+				console.log("filesCreateFolderBatch Res:", res);
 			})
 			.catch((e: any) => {
-				console.error("Dropbox filesMoveV2 Error:", e);
+				console.error("Dropbox filesCreateFolderBatch Error:", e);
 			});
 	}
 

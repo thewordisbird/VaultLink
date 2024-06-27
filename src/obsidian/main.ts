@@ -108,7 +108,10 @@ export default class ObsidianDropboxConnect extends Plugin {
 				const fromPath = `/${this.settings.cloudVaultPath}/${ctx}`;
 				const toPath = `/${this.settings.cloudVaultPath}/${folderOrFile.path}`;
 
-				dropboxProvider.renameFolderOrFile(fromPath, toPath);
+				dropboxProvider.batchRenameFolderOrFile({
+					from_path: fromPath,
+					to_path: toPath,
+				});
 			}),
 		);
 
