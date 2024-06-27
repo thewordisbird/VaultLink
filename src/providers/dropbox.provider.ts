@@ -236,7 +236,7 @@ export class DropboxProvider {
 			});
 	}
 
-	createFile = throttleProcess(
+	createFile = throttleProcess<Parameters<typeof this._createFile>>(
 		this._createFile.bind(this),
 		THROTTLE_DELAY_TIME,
 	);
