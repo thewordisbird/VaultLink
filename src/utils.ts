@@ -27,12 +27,12 @@ export function batchProcess<A>(callback: BatchCallback<A>, batchTime: number) {
 	return addToQueue;
 }
 
-type ThrottleCallback<T> = (args: T) => void;
+type ThrottleCallback = (args: unknown) => void;
 export function throttleProcess<A>(
-	callback: ThrottleCallback<A>,
+	callback: ThrottleCallback,
 	throttleTime: number,
 ) {
-	const queue: A[] = [];
+	const queue: unknown[] = [];
 	let intervalId: NodeJS.Timer | null = null;
 
 	const flushQueue = () => {
@@ -47,7 +47,8 @@ export function throttleProcess<A>(
 		}, throttleTime);
 	};
 
-	const addToQueue = (args: A) => {
+	const addToQueue = (args: unknown) => {
+		console.log("args:", args);
 		queue.push(args);
 		if (!intervalId) flushQueue();
 	};

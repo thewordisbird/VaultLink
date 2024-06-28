@@ -235,13 +235,18 @@ export class DropboxProvider {
 				console.error("Dropbox filesDeleteBatch Error:", e);
 			});
 	}
-
-	createFile = throttleProcess<Parameters<typeof this._createFile>>(
+	createFile = throttleProcess(
 		this._createFile.bind(this),
 		THROTTLE_DELAY_TIME,
 	);
 
-	private _createFile(path: string, contents: ArrayBuffer) {
+	private _createFile({
+		path,
+		contents,
+	}: {
+		path: string;
+		contents: string;
+	}) {
 		this.dropbox
 			.filesUpload({
 				path: path,

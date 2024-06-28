@@ -67,15 +67,15 @@ export default class ObsidianDropboxConnect extends Plugin {
 					}
 
 					if (folderOrFile instanceof TFile) {
-						console.log("new file created");
+						console.log("new file created", folderOrFile);
 						this.app.vault
 							.readBinary(folderOrFile)
 							.then((contents) => {
 								if (!this.settings.cloudVaultPath) return;
-								dropboxProvider.createFile(
-									`/${this.settings.cloudVaultPath}/${folderOrFile.path}`,
-									contents,
-								);
+								dropboxProvider.createFile({
+									path: `/${this.settings.cloudVaultPath}/${folderOrFile.path}`,
+									contents: contents,
+								});
 							});
 					}
 				}),
