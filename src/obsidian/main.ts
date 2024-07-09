@@ -3,10 +3,17 @@ import { DEFAULT_SETTINGS, SettingsTab } from "./settings";
 import { DropboxProvider } from ".././providers/dropbox.provider";
 import { PubSub } from "../../lib/pubsub";
 import type { PluginSettings } from "./settings";
+import { dropboxContentHasher } from "src/providers/dropbox.hasher";
 
+type FileData = {
+	name: string;
+	path: string;
+	contentHash: string;
+	rev?: string;
+};
 export default class ObsidianDropboxConnect extends Plugin {
 	settings: PluginSettings;
-
+	fileMap = new Map<string, FileData>();
 	async onload() {
 		await this.loadSettings();
 		const settingsTab = new SettingsTab(this.app, this);
@@ -23,6 +30,32 @@ export default class ObsidianDropboxConnect extends Plugin {
 			dropboxProvider.authorizeWithRefreshToken(refreshToken);
 		}
 
+		if (await dropboxProvider.getAuthorizationState()) {
+			let clientFoldersOrFiles = this.app.vault.getAllLoadedFiles();
+			for (let clientFolderOrFile of clientFoldersOrFiles) {
+				if (clientFolderOrFile instanceof TFile) {
+					console.log(
+						"Name:",
+						clientFolderOrFile.name,
+						"Size:",
+						clientFolderOrFile.stat.size / 1024,
+					);
+
+					let contentHash = dropboxContentHasher(
+						await this.app.vault.readBinary(clientFolderOrFile),
+					);
+
+					let { name, path } = clientFolderOrFile;
+					this.fileMap.set(path, {
+						name,
+						path: "/" + path,
+						contentHash,
+					});
+				}
+			}
+
+			console.log("fileMap:", this.fileMap);
+		}
 		// Set  protocol handler to catch authorization response form dropbox
 		this.registerObsidianProtocolHandler(
 			"connect-dropbox",
