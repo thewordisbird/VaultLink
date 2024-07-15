@@ -4,16 +4,16 @@ import { DropboxProvider } from ".././providers/dropbox.provider";
 import { PubSub } from "../../lib/pubsub";
 import type { PluginSettings } from "./settings";
 import { dropboxContentHasher } from "src/providers/dropbox.hasher";
+import { files } from "dropbox";
 
-type FileData = {
-	name: string;
-	path: string;
+interface FileData extends TFile {
 	contentHash: string;
 	rev?: string;
-};
+}
 export default class ObsidianDropboxConnect extends Plugin {
 	settings: PluginSettings;
 	fileMap = new Map<string, FileData>();
+	cursor: string;
 	async onload() {
 		await this.loadSettings();
 		const settingsTab = new SettingsTab(this.app, this);
@@ -34,27 +34,136 @@ export default class ObsidianDropboxConnect extends Plugin {
 			let clientFoldersOrFiles = this.app.vault.getAllLoadedFiles();
 			for (let clientFolderOrFile of clientFoldersOrFiles) {
 				if (clientFolderOrFile instanceof TFile) {
-					console.log(
-						"Name:",
-						clientFolderOrFile.name,
-						"Size:",
-						clientFolderOrFile.stat.size / 1024,
-					);
-
 					let contentHash = dropboxContentHasher(
 						await this.app.vault.readBinary(clientFolderOrFile),
 					);
 
-					let { name, path } = clientFolderOrFile;
-					this.fileMap.set(path, {
-						name,
-						path: "/" + path,
+					let { path } = clientFolderOrFile;
+					this.fileMap.set("/" + path, {
+						...clientFolderOrFile,
 						contentHash,
 					});
 				}
 			}
-
 			console.log("fileMap:", this.fileMap);
+
+			let remoteFoldersOrFiles = await dropboxProvider.listFiles(
+				"/" + this.settings.cloudVaultPath,
+			);
+			console.log(remoteFoldersOrFiles);
+
+			let dbFiles: Array<
+				| files.FileMetadataReference
+				| files.FolderMetadataReference
+				| files.DeletedMetadataReference
+			> = [];
+			let res = await dropboxProvider.dropbox.filesListFolder({
+				path: "/" + this.settings.cloudVaultPath,
+			});
+
+			while (res.result.has_more) {
+				dbFiles.concat(res.result.entries);
+				res = await dropboxProvider.dropbox.filesListFolderContinue({
+					cursor: res.result.cursor,
+				});
+			}
+
+			// for (let entry of res.result.entries) {
+			// 	if (entry[".tag"] != "file") continue;
+			// 	dropboxProvider.dropbox
+			// 		.filesDownload({ path: entry.path_lower! })
+			// 		.then((res) => {
+			// 			console.log("download:", res.result);
+			// 		});
+			// }
+			dbFiles.concat(res.result.entries);
+
+			this.cursor = res.result.cursor;
+
+			this.registerInterval(
+				window.setInterval(async () => {
+					console.log("long poll @ cursor:", this.cursor);
+					const { result: longPollResult } =
+						await dropboxProvider.dropbox.filesListFolderLongpoll({
+							cursor: this.cursor,
+						});
+
+					if (!longPollResult.changes) return;
+
+					const { result: filesListFolderResult } =
+						await dropboxProvider.dropbox.filesListFolderContinue({
+							cursor: this.cursor,
+						});
+
+					this.cursor = filesListFolderResult.cursor;
+					console.log("Changes...", res.result.entries);
+
+					for (let entry of filesListFolderResult.entries) {
+						console.log("entry:", entry);
+						if (entry[".tag"] == "folder") continue;
+						console.log("path_lower:", entry);
+
+						let { result: fileDownloadResult } =
+							await dropboxProvider.dropbox.filesDownload({
+								path: entry.path_lower!,
+							});
+
+						console.log("download:", fileDownloadResult);
+
+						console.log(
+							"contents:",
+							// @ts-ignore
+							fileDownloadResult.fileBlob.text(),
+						);
+						let file = this.app.vault.getFileByPath(
+							entry.path_lower!,
+						);
+						if (!file) return;
+					}
+
+					this.cursor = filesListFolderResult.cursor;
+				}, 30000),
+			);
+
+			/*
+			 * Syncing check
+			 *		- A file is unchanged - path lookup and content hash math
+			 *			- update fileMap with rev from DB
+			 *		- A file has been changed - path lookup, but inconsistent content hash
+			 *			- check modDate time agains local mod date/time to determine most recent change
+			 *			- process change in determined direction
+			 *			- update fileMap with rev from DB
+			 *		- A file has been moved locally off line
+			 *		- A file has been moved remotely
+			 *		- A file has been deleted locally off line
+			 *		- A file has been deleted remotely
+			 */
+			/*
+			for (let remoteFolderOfFile of remoteFoldersOrFiles) {
+				if (this.fileMap.has(remoteFolderOfFile.displayPath!)) {
+					let localFile = this.fileMap.get(
+						remoteFolderOfFile.displayPath!,
+					);
+					if (
+						remoteFolderOfFile.contentHash == localFile?.contentHash
+					) {
+						localFile!.rev = remoteFolderOfFile.rev;
+						console.log("Files match... update rev");
+					} else {
+						// For now, use the most recent version:
+						if (localFile?.stat.mtime > remoteFolderOfFile.
+					}
+				}
+				if (!this.fileMap.has(remoteFolderOfFile.displayPath!)) {
+					// File is on cloud but not local
+					// - download and store locally
+					console.log(
+						"No Local Version of",
+						remoteFolderOfFile.displayPath,
+					);
+				}
+			}
+			*/
 		}
 		// Set  protocol handler to catch authorization response form dropbox
 		this.registerObsidianProtocolHandler(

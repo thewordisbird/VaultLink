@@ -31,6 +31,7 @@ export class DropboxProvider {
 	dropbox: Dropbox;
 	dropboxAuth: DropboxAuth;
 	state = {} as DropboxState;
+	revMap = new Map<string, string>();
 
 	static resetInstance() {
 		instance = undefined;
@@ -159,6 +160,23 @@ export class DropboxProvider {
 		});
 	}
 
+	listFiles(root = "") {
+		return this.dropbox
+			.filesListFolder({ path: root })
+			.then((res) => {
+				return res.result.entries.filter(
+					(entry) => entry[".tag"] === "file",
+				);
+			})
+			.catch((e: any) => {
+				console.error("listFolders error:", e);
+				throw new Error(DROPBOX_PROVIDER_ERRORS.resourceAccessError);
+			});
+	}
+
+	downloadFile(path: string) {
+		return this.dropbox.filesDownload({ path }).then((res) => res.result);
+	}
 	getUserInfo(): Promise<void> {
 		return this.dropbox
 			.usersGetCurrentAccount()
@@ -261,4 +279,17 @@ export class DropboxProvider {
 	}
 
 	modifyFile() {}
+
+	async sync(path: string) {
+		// call listfolders and populate revMap
+		let res = await this.dropbox.filesListFolder({ path, recursive: true });
+		do {
+			for (let entry of res.result.entries) {
+				console.log(entry);
+			}
+			res = await this.dropbox.filesListFolderContinue({
+				cursor: res.result.cursor,
+			});
+		} while (res.result.has_more);
+	}
 }
