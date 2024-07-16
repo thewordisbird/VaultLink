@@ -1,5 +1,4 @@
 import { Dropbox, DropboxAuth, DropboxResponse, files } from "dropbox";
-import { debounce } from "obsidian";
 import { batchProcess, throttleProcess } from "src/utils";
 import type { Folder } from "../types";
 
@@ -261,24 +260,45 @@ export class DropboxProvider {
 	private _createFile({
 		path,
 		contents,
+		callback,
 	}: {
 		path: string;
 		contents: string;
+		callback: (args: files.FileMetadata) => void;
 	}) {
-		this.dropbox
+		return this.dropbox
 			.filesUpload({
 				path: path,
 				contents: contents,
 			})
-			.then((res) => {
-				console.log("filesUpload Res:", res);
-			})
+			.then((res) => callback(res.result))
 			.catch((e: any) => {
 				console.error("Dropbox filesUpload Error:", e);
 			});
 	}
 
-	modifyFile() {}
+	modifyFile({
+		path,
+		contents,
+		rev,
+	}: {
+		path: string;
+		contents: ArrayBuffer;
+		rev: string;
+	}) {
+		return this.dropbox
+			.filesUpload({
+				mode: {
+					".tag": "update",
+					update: rev,
+				},
+				path: path,
+				contents: new Blob([contents]),
+			})
+			.catch((e: any) => {
+				console.error("Dropbox filesUpload Error:", e);
+			});
+	}
 
 	async sync(path: string) {
 		// call listfolders and populate revMap

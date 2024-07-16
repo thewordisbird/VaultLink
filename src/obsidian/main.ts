@@ -39,7 +39,9 @@ export default class ObsidianDropboxConnect extends Plugin {
 					);
 
 					let { path } = clientFolderOrFile;
-					this.fileMap.set("/" + path, {
+					let fullPath =
+						"/" + this.settings.cloudVaultPath + "/" + path;
+					this.fileMap.set(fullPath.toLowerCase(), {
 						...clientFolderOrFile,
 						contentHash,
 					});
@@ -217,6 +219,20 @@ export default class ObsidianDropboxConnect extends Plugin {
 								dropboxProvider.createFile({
 									path: `/${this.settings.cloudVaultPath}/${folderOrFile.path}`,
 									contents: contents,
+									callback: (res: any) => {
+										// @ts-ignore
+										this.fileMap.set(res.path_lower, {
+											// @ts-ignore
+											rev: res.rev,
+											// @ts-ignore
+											contentHash: res.content_hash,
+										});
+
+										console.log(
+											"Updated fileMap:",
+											this.fileMap,
+										);
+									},
 								});
 							});
 					}
@@ -231,17 +247,36 @@ export default class ObsidianDropboxConnect extends Plugin {
 
 		this.registerEvent(
 			this.app.vault.on("modify", (folderOrFile) => {
-				/*
 				this.app.vault
 					.readBinary(folderOrFile as TFile)
 					.then((contents) => {
 						if (!this.settings.cloudVaultPath) return;
-						dropboxProvider.uploadFile({
-							path: `/${this.settings.cloudVaultPath}/${folderOrFile.path}`,
+						const path =
+							`/${this.settings.cloudVaultPath}/${folderOrFile.path}`.toLowerCase();
+						const localFileData = this.fileMap.get(
+							path.toLowerCase(),
+						);
+						if (!localFileData) return;
+
+						return dropboxProvider.modifyFile({
+							path,
 							contents,
+							rev: localFileData.rev!,
+							//contentHash: localFileData.contentHash,
 						});
+					})
+					.then((res) => {
+						let contentHash = res?.result.content_hash;
+						let rev = res?.result.rev;
+						let path = res?.result.path_lower;
+
+						let localFile = this.fileMap.get(path!);
+						if (!localFile) return;
+						localFile.rev = rev;
+						localFile.contentHash = contentHash!;
+
+						console.log("fileMap after Mod:", this.fileMap);
 					});
-				*/
 			}),
 		);
 

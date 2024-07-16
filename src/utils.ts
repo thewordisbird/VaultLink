@@ -28,7 +28,7 @@ export function batchProcess<A>(callback: BatchCallback<A>, batchTime: number) {
 }
 
 type ThrottleCallback = (args: unknown) => void;
-export function throttleProcess<A>(
+export function throttleProcess(
 	callback: ThrottleCallback,
 	throttleTime: number,
 ) {
