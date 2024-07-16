@@ -14,6 +14,7 @@ export default class ObsidianDropboxConnect extends Plugin {
 	settings: PluginSettings;
 	fileMap = new Map<string, FileData>();
 	cursor: string;
+
 	async onload() {
 		await this.loadSettings();
 		const settingsTab = new SettingsTab(this.app, this);
@@ -201,9 +202,6 @@ export default class ObsidianDropboxConnect extends Plugin {
 			// This avoids running the on create callback on vault load
 			this.registerEvent(
 				this.app.vault.on("create", (folderOrFile) => {
-					console.log("Running inside onLayoutReady");
-					console.log(folderOrFile);
-
 					if (folderOrFile instanceof TFolder) {
 						dropboxProvider.batchCreateFolder(
 							`/${this.settings.cloudVaultPath}/${folderOrFile.path}`,
@@ -227,11 +225,6 @@ export default class ObsidianDropboxConnect extends Plugin {
 											// @ts-ignore
 											contentHash: res.content_hash,
 										});
-
-										console.log(
-											"Updated fileMap:",
-											this.fileMap,
-										);
 									},
 								});
 							});
@@ -239,11 +232,6 @@ export default class ObsidianDropboxConnect extends Plugin {
 				}),
 			);
 		});
-
-		this.registerEvent(
-			// TODO: handle sync on load
-			this.app.vault.on("create", (folderOrFile) => {}),
-		);
 
 		this.registerEvent(
 			this.app.vault.on("modify", (folderOrFile) => {
@@ -284,6 +272,11 @@ export default class ObsidianDropboxConnect extends Plugin {
 			this.app.vault.on("rename", (folderOrFile, ctx) => {
 				const fromPath = `/${this.settings.cloudVaultPath}/${ctx}`;
 				const toPath = `/${this.settings.cloudVaultPath}/${folderOrFile.path}`;
+
+				let syncData = this.fileMap.get(fromPath.toLowerCase());
+				if (!syncData) return;
+				this.fileMap.delete(fromPath.toLowerCase());
+				this.fileMap.set(toPath.toLowerCase(), { ...syncData });
 
 				dropboxProvider.batchRenameFolderOrFile({
 					from_path: fromPath,

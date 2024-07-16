@@ -227,10 +227,34 @@ export class DropboxProvider {
 				// if the process was successful. this will require a quing process
 				// for the plugin to continue to check if there are sync issues
 				console.log("filesCreateFolderBatch Res:", res);
+				// @ts-ignore
+				this.watchForBatchToComplete(res.result.async_job_id);
 			})
 			.catch((e: any) => {
 				console.error("Dropbox filesCreateFolderBatch Error:", e);
 			});
+	}
+
+	async watchForBatchToComplete(
+		batchId: string,
+		//callback: (args: files.RelocationBatchResultEntry) => void
+	) {
+		let intervalId = setInterval(() => {
+			console.log("Ping...");
+			this._watchForBatchToComplete(batchId).then((res) => {
+				if (res.result[".tag"] == "complete") {
+					clearInterval(intervalId);
+					// iterate over entries to make sure everything was successful
+					// for (let entry of res.result.entries){
+					// 	callback(entry);
+					// }
+				}
+			});
+		}, 2000);
+	}
+
+	private _watchForBatchToComplete(batchId: string) {
+		return this.dropbox.filesMoveBatchCheckV2({ async_job_id: batchId });
 	}
 
 	batchDeleteFolderOrFile = batchProcess(
@@ -286,6 +310,7 @@ export class DropboxProvider {
 		contents: ArrayBuffer;
 		rev: string;
 	}) {
+		console.log("modifyFile:", path, contents, rev);
 		return this.dropbox
 			.filesUpload({
 				mode: {
