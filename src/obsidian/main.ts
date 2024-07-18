@@ -11,6 +11,7 @@ interface ClientFileData extends TFile {
 	rev?: string;
 }
 
+// TODO: Define this type - should not bring dropbox contents into this file
 interface RemoteFileData extends files.FileMetadataReference {}
 
 enum SyncStatus {
@@ -31,199 +32,19 @@ export default class ObsidianDropboxConnect extends Plugin {
 
 		const pubsub = new PubSub();
 
-		// Setup Dropbox Provider
+		/** SETUP CLOUD PROVIDERS **/
+		// TODO: This should be dynamic and not instantiated only by
+		// - reading the eventual localstorage provider property
+		// - set when the client selects the provider
+		// and then be seta as a more general name - provider
 		const dropboxProvider = new DropboxProvider();
+		/** END SETUP CLOUD PROVIDERS **/
 
 		/** PROVIDER AUTHENTICATIN`**/
-		// Retrieve and set new access token if a valid refresh token is stored in local storage
-		const refreshToken = localStorage.getItem("dropboxRefreshToken");
-		// TODO: Decide what needs to be done if non authenticated
-		if (refreshToken) {
-			dropboxProvider.authorizeWithRefreshToken(refreshToken);
-		}
-
-		if (await dropboxProvider.getAuthorizationState()) {
-			// build fileMap from the client files
-			let clientFoldersOrFiles = this.app.vault.getAllLoadedFiles();
-			for (let clientFolderOrFile of clientFoldersOrFiles) {
-				if (!(clientFolderOrFile instanceof TFile)) continue;
-
-				let contentHash = dropboxContentHasher(
-					await this.app.vault.readBinary(clientFolderOrFile),
-				);
-
-				let fullPath =
-					"/" +
-					this.settings.cloudVaultPath +
-					"/" +
-					clientFolderOrFile.path;
-				this.fileMap.set(fullPath.toLowerCase(), {
-					...clientFolderOrFile,
-					contentHash,
-				});
-			}
-
-			console.log("fileMap - client:", this.fileMap);
-
-			let remoteFiles = await dropboxProvider.listFiles(
-				"/" + this.settings.cloudVaultPath,
-			);
-
-			console.log("REMOTE FILES:", remoteFiles);
-
-			let dbFiles: Array<
-				| files.FileMetadataReference
-				| files.FolderMetadataReference
-				| files.DeletedMetadataReference
-			> = [];
-
-			// let res = await dropboxProvider.dropbox.filesListFolder({
-			// 	path: "/" + this.settings.cloudVaultPath,
-			// });
-			//
-			// dbFiles.concat(res.result.entries);
-			// while (res.result.has_more) {
-			// 	res = await dropboxProvider.dropbox.filesListFolderContinue({
-			// 		cursor: res.result.cursor,
-			// 	});
-			// 	dbFiles.concat(res.result.entries);
-			// }
-
-			let res: DropboxResponse<files.ListFolderResult>;
-
-			// do {
-			// 	res = await dropboxProvider.dropbox.filesListFolder({
-			// 		path: "/" + this.settings.cloudVaultPath,
-			// 	});
-			// 	this.cursor = res.result.cursor;
-			// 	dbFiles.concat(res.result.entries);
-			// } while (res.result.has_more);
-
-			for (let remoteFileMetadata of remoteFiles.files) {
-				if (remoteFileMetadata[".tag"] != "file") continue;
-
-				let clientFileMetadata = this.fileMap.get(
-					remoteFileMetadata.path_lower!,
-				);
-
-				let syncStatus = getSyncStatus({
-					provider: dropboxProvider,
-					clientFileMetadata,
-					remoteFileMetadata,
-				});
-
-				switch (syncStatus) {
-					case SyncStatus.synced:
-						clientFileMetadata!.rev = remoteFileMetadata.rev;
-						break;
-					case SyncStatus.clientAhead:
-						await this.reconcileClientAhead({
-							provider: dropboxProvider,
-							clientFileMetadata: clientFileMetadata!,
-						});
-						break;
-					case SyncStatus.remoteAhead:
-						await this.reconcileRemoteAhead({
-							provider: dropboxProvider,
-							clientFileMetadata: clientFileMetadata!,
-						});
-						break;
-					case SyncStatus.clientNotFound:
-						break;
-				}
-			}
-
-			this.cursor = remoteFiles.cursor;
-
-			// Setup dropbox longpoll
-			this.registerInterval(
-				window.setInterval(async () => {
-					//console.log("long poll @ cursor:", this.cursor);
-					const { result: longPollResult } =
-						await dropboxProvider.dropbox.filesListFolderLongpoll({
-							cursor: this.cursor,
-						});
-
-					if (!longPollResult.changes) return;
-
-					const { result: filesListFolderResult } =
-						await dropboxProvider.dropbox.filesListFolderContinue({
-							cursor: this.cursor,
-						});
-
-					this.cursor = filesListFolderResult.cursor;
-					//console.log("Changes...", res.result.entries);
-
-					for (let entry of filesListFolderResult.entries) {
-						//console.log("entry:", entry);
-						if (entry[".tag"] == "folder") continue;
-						//console.log("path_lower:", entry);
-
-						let { result: fileDownloadResult } =
-							await dropboxProvider.dropbox.filesDownload({
-								path: entry.path_lower!,
-							});
-
-						// console.log("download:", fileDownloadResult);
-						//
-						// console.log(
-						// 	"contents:",
-						// 	// @ts-ignore
-						// 	fileDownloadResult.fileBlob.text(),
-						// );
-						let file = this.app.vault.getFileByPath(
-							entry.path_lower!,
-						);
-						if (!file) return;
-					}
-
-					this.cursor = filesListFolderResult.cursor;
-				}, 30000),
-			);
-
-			/*
-			 * Syncing check
-			 *		- A file is unchanged - path lookup and content hash math
-			 *			- update fileMap with rev from DB
-			 *		- A file has been changed - path lookup, but inconsistent content hash
-			 *			- check modDate time agains local mod date/time to determine most recent change
-			 *			- process change in determined direction
-			 *			- update fileMap with rev from DB
-			 *		- A file has been moved locally off line
-			 *		- A file has been moved remotely
-			 *		- A file has been deleted locally off line
-			 *		- A file has been deleted remotely
-			 */
-			/*
-			for (let remoteFolderOfFile of remoteFoldersOrFiles) {
-				if (this.fileMap.has(remoteFolderOfFile.displayPath!)) {
-					let localFile = this.fileMap.get(
-						remoteFolderOfFile.displayPath!,
-					);
-					if (
-						remoteFolderOfFile.contentHash == localFile?.contentHash
-					) {
-						localFile!.rev = remoteFolderOfFile.rev;
-						console.log("Files match... update rev");
-					} else {
-						// For now, use the most recent version:
-						if (localFile?.stat.mtime > remoteFolderOfFile.
-					}
-				}
-				if (!this.fileMap.has(remoteFolderOfFile.displayPath!)) {
-					// File is on cloud but not local
-					// - download and store locally
-					console.log(
-						"No Local Version of",
-						remoteFolderOfFile.displayPath,
-					);
-				}
-			}
-			*/
-		}
 		// Set  protocol handler to catch authorization response form dropbox
 		this.registerObsidianProtocolHandler(
 			"connect-dropbox",
+			// TODO: Extract function
 			(protocolData) => {
 				// TODO: Handle error if no code is available
 				if (!protocolData.code) throw new Error("");
@@ -248,12 +69,134 @@ export default class ObsidianDropboxConnect extends Plugin {
 			},
 		);
 
+		// TODO: Create new localStorage property: "provider" in addition to
+		//	property: "providerRefreshToken" for eventual scaling
+		const refreshToken = localStorage.getItem("dropboxRefreshToken");
+
+		// Automatically authenticate from refresh token
+		if (refreshToken) {
+			dropboxProvider.authorizeWithRefreshToken(refreshToken);
+		}
 		/** END PROVIDER AUTHORIZATION **/
+
+		/** STARTUP SYNC **/
+		if (await dropboxProvider.getAuthorizationState()) {
+			// build fileMap from the client files
+			const clientFoldersOrFiles = this.app.vault.getAllLoadedFiles();
+			for (let clientFolderOrFile of clientFoldersOrFiles) {
+				// TODO: Extract function
+				if (!(clientFolderOrFile instanceof TFile)) continue;
+
+				let contentHash = dropboxContentHasher(
+					await this.app.vault.readBinary(clientFolderOrFile),
+				);
+
+				let fullPath =
+					"/" +
+					this.settings.cloudVaultPath +
+					"/" +
+					clientFolderOrFile.path;
+
+				this.fileMap.set(fullPath.toLowerCase(), {
+					...clientFolderOrFile,
+					contentHash,
+				});
+			}
+
+			// reconcile remoteFiles
+			let remoteFiles = await dropboxProvider.listFiles(
+				"/" + this.settings.cloudVaultPath,
+			);
+
+			for (let remoteFileMetadata of remoteFiles.files) {
+				// TODO: Extract function
+				if (remoteFileMetadata[".tag"] != "file") continue;
+
+				let clientFileMetadata = this.fileMap.get(
+					remoteFileMetadata.path_lower!,
+				);
+
+				let syncStatus = getSyncStatus({
+					clientFileMetadata,
+					remoteFileMetadata,
+				});
+
+				switch (syncStatus) {
+					case SyncStatus.synced:
+						clientFileMetadata!.rev = remoteFileMetadata.rev;
+						break;
+					case SyncStatus.clientAhead:
+						await this.reconcileClientAhead({
+							provider: dropboxProvider,
+							clientFileMetadata: clientFileMetadata!,
+						});
+						break;
+					case SyncStatus.remoteAhead:
+						await this.reconcileRemoteAhead({
+							provider: dropboxProvider,
+							clientFileMetadata: clientFileMetadata!,
+						});
+						break;
+					case SyncStatus.clientNotFound:
+						break;
+				}
+				this.cursor = remoteFiles.cursor;
+			}
+			/** END STARTUP SYNC **/
+
+			/** SETUP LONGPOLL **/
+			// TODO: Dependency inversion to not be specific to dropboxProvider
+			this.registerInterval(
+				window.setInterval(async () => {
+					// TODO: Extract function
+					const { result: longPollResult } =
+						await dropboxProvider.dropbox.filesListFolderLongpoll({
+							cursor: this.cursor,
+						});
+
+					if (!longPollResult.changes) return;
+
+					const { result: filesListFolderResult } =
+						await dropboxProvider.dropbox.filesListFolderContinue({
+							cursor: this.cursor,
+						});
+
+					this.cursor = filesListFolderResult.cursor;
+
+					for (let entry of filesListFolderResult.entries) {
+						// TODO: Implement runtime sync
+						// TODO: Extract function
+						if (entry[".tag"] == "folder") continue;
+
+						// let { result: fileDownloadResult } =
+						// 	await dropboxProvider.dropbox.filesDownload({
+						// 		path: entry.path_lower!,
+						// 	});
+
+						// console.log("download:", fileDownloadResult);
+						//
+						// console.log(
+						// 	"contents:",
+						// 	// @ts-ignore
+						// 	fileDownloadResult.fileBlob.text(),
+						// );
+						let file = this.app.vault.getFileByPath(
+							entry.path_lower!,
+						);
+						if (!file) return;
+					}
+
+					this.cursor = filesListFolderResult.cursor;
+				}, 30000),
+			);
+		}
+		/** END SETUP LONGPOLL **/
 
 		/** SYNC EVENT HANDLERS **/
 		this.app.workspace.onLayoutReady(() => {
 			// This avoids running the on create callback on vault load
 			this.registerEvent(
+				// TODO: Extract function
 				this.app.vault.on("create", (folderOrFile) => {
 					if (folderOrFile instanceof TFolder) {
 						dropboxProvider.batchCreateFolder(
@@ -287,6 +230,7 @@ export default class ObsidianDropboxConnect extends Plugin {
 		});
 
 		this.registerEvent(
+			// TODO: Extract function
 			this.app.vault.on("modify", (folderOrFile) => {
 				this.app.vault
 					.readBinary(folderOrFile as TFile)
@@ -303,7 +247,6 @@ export default class ObsidianDropboxConnect extends Plugin {
 							path,
 							contents,
 							rev: localFileData.rev!,
-							//contentHash: localFileData.contentHash,
 						});
 					})
 					.then((res) => {
@@ -365,6 +308,8 @@ export default class ObsidianDropboxConnect extends Plugin {
 	async saveSettings() {
 		await this.saveData(this.settings);
 	}
+
+	/** Helpers **/
 	async reconcileClientAhead(args: {
 		provider: DropboxProvider;
 		clientFileMetadata: ClientFileData;
@@ -417,14 +362,14 @@ export default class ObsidianDropboxConnect extends Plugin {
 			{ mtime: new Date(remoteFileContents.server_modified).valueOf() },
 		);
 	}
+	/** END HELPERS **/
 }
 
 function getSyncStatus(args: {
-	provider: DropboxProvider;
 	clientFileMetadata: ClientFileData | undefined;
 	remoteFileMetadata: RemoteFileData;
 }): SyncStatus {
-	const { provider, clientFileMetadata, remoteFileMetadata } = args;
+	const { clientFileMetadata, remoteFileMetadata } = args;
 	if (clientFileMetadata == undefined) {
 		return SyncStatus.clientNotFound;
 	}
