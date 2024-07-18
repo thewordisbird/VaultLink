@@ -1,9 +1,8 @@
-import { Plugin, TFile, TFolder } from "obsidian";
+import { Plugin, TAbstractFile, TFile, TFolder } from "obsidian";
 import { DEFAULT_SETTINGS, SettingsTab } from "./settings";
 import { DropboxProvider } from ".././providers/dropbox.provider";
 import { PubSub } from "../../lib/pubsub";
 import type { PluginSettings } from "./settings";
-import { dropboxContentHasher } from "src/providers/dropbox.hasher";
 import { DropboxResponse, files } from "dropbox";
 
 interface ClientFileData extends TFile {
@@ -83,25 +82,11 @@ export default class ObsidianDropboxConnect extends Plugin {
 		if (await dropboxProvider.getAuthorizationState()) {
 			// build fileMap from the client files
 			const clientFoldersOrFiles = this.app.vault.getAllLoadedFiles();
-			for (let clientFolderOrFile of clientFoldersOrFiles) {
-				// TODO: Extract function
-				if (!(clientFolderOrFile instanceof TFile)) continue;
 
-				let contentHash = dropboxContentHasher(
-					await this.app.vault.readBinary(clientFolderOrFile),
-				);
-
-				let fullPath =
-					"/" +
-					this.settings.cloudVaultPath +
-					"/" +
-					clientFolderOrFile.path;
-
-				this.fileMap.set(fullPath.toLowerCase(), {
-					...clientFolderOrFile,
-					contentHash,
-				});
-			}
+			await this.buildFileMap({
+				provider: dropboxProvider,
+				clientFoldersOrFiles,
+			});
 
 			// reconcile remoteFiles
 			let remoteFiles = await dropboxProvider.listFiles(
@@ -310,6 +295,30 @@ export default class ObsidianDropboxConnect extends Plugin {
 	}
 
 	/** Helpers **/
+	async buildFileMap(args: {
+		provider: DropboxProvider;
+		clientFoldersOrFiles: TAbstractFile[];
+	}) {
+		const { provider, clientFoldersOrFiles } = args;
+		for (let clientFolderOrFile of clientFoldersOrFiles) {
+			if (!(clientFolderOrFile instanceof TFile)) continue;
+
+			let contentHash = provider.createDropboxContentHash({
+				fileData: await this.app.vault.readBinary(clientFolderOrFile),
+			});
+
+			let fullPath =
+				"/" +
+				this.settings.cloudVaultPath +
+				"/" +
+				clientFolderOrFile.path;
+
+			this.fileMap.set(fullPath.toLowerCase(), {
+				...clientFolderOrFile,
+				contentHash,
+			});
+		}
+	}
 	async reconcileClientAhead(args: {
 		provider: DropboxProvider;
 		clientFileMetadata: ClientFileData;

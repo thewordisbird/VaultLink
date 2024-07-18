@@ -1,4 +1,5 @@
 import { Dropbox, DropboxAuth, DropboxResponse, files } from "dropbox";
+import { dropboxContentHasher } from "./dropbox.hasher";
 import { batchProcess, throttleProcess } from "src/utils";
 import type { Folder } from "../types";
 
@@ -375,5 +376,9 @@ export class DropboxProvider {
 				}
 				return res.result;
 			});
+	}
+
+	createDropboxContentHash(args: { fileData: ArrayBuffer }) {
+		return dropboxContentHasher(args.fileData);
 	}
 }
