@@ -11,6 +11,9 @@ type DropboxState = {
 	account: DropboxAccount;
 };
 
+interface FileMetadataExtended extends files.FileMetadata {
+	fileBlob?: Blob;
+}
 const BATCH_DELAY_TIME = 1000;
 const THROTTLE_DELAY_TIME = 500;
 
@@ -161,11 +164,16 @@ export class DropboxProvider {
 
 	listFiles(root = "") {
 		return this.dropbox
-			.filesListFolder({ path: root })
+			.filesListFolder({ path: root, recursive: true })
 			.then((res) => {
-				return res.result.entries.filter(
+				const files = res.result.entries.filter(
 					(entry) => entry[".tag"] === "file",
 				);
+
+				return {
+					files,
+					cursor: res.result.cursor,
+				};
 			})
 			.catch((e: any) => {
 				console.error("listFolders error:", e);
@@ -173,7 +181,8 @@ export class DropboxProvider {
 			});
 	}
 
-	downloadFile(path: string) {
+	downloadFile(args: { path: string }): Promise<FileMetadataExtended> {
+		const { path } = args;
 		return this.dropbox.filesDownload({ path }).then((res) => res.result);
 	}
 	getUserInfo(): Promise<void> {
@@ -325,6 +334,21 @@ export class DropboxProvider {
 			});
 	}
 
+	overwriteFile(args: { path: string; contents: ArrayBuffer }) {
+		console.log("overwriteFile:", args.path, args.contents);
+		return this.dropbox
+			.filesUpload({
+				mode: {
+					".tag": "overwrite",
+				},
+				path: args.path,
+				contents: new Blob([args.contents]),
+			})
+			.catch((e: any) => {
+				console.error("Dropbox filesUpload Error:", e);
+			});
+	}
+
 	async sync(path: string) {
 		// call listfolders and populate revMap
 		let res = await this.dropbox.filesListFolder({ path, recursive: true });
@@ -336,5 +360,20 @@ export class DropboxProvider {
 				cursor: res.result.cursor,
 			});
 		} while (res.result.has_more);
+	}
+
+	getFileMetadata(args: {
+		path: string;
+	}): Promise<files.FileMetadataReference> {
+		return this.dropbox
+			.filesGetMetadata({
+				path: args.path,
+			})
+			.then((res) => {
+				if (res.result[".tag"] != "file") {
+					throw new Error("Error: file metadata does not exist");
+				}
+				return res.result;
+			});
 	}
 }
