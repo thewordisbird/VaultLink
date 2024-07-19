@@ -78,8 +78,9 @@ export default class ObsidianDropboxConnect extends Plugin {
 		}
 		/** END PROVIDER AUTHORIZATION **/
 
-		/** STARTUP SYNC **/
+		/** PROVIDER SYNC **/
 		if (await dropboxProvider.getAuthorizationState()) {
+			/** STARTUP SYNC **/
 			// build fileMap from the client files
 			const clientFoldersOrFiles = this.app.vault.getAllLoadedFiles();
 
@@ -88,45 +89,9 @@ export default class ObsidianDropboxConnect extends Plugin {
 				clientFoldersOrFiles,
 			});
 
-			// reconcile remoteFiles
-			let remoteFiles = await dropboxProvider.listFiles(
-				"/" + this.settings.cloudVaultPath,
-			);
-
-			for (let remoteFileMetadata of remoteFiles.files) {
-				// TODO: Extract function
-				if (remoteFileMetadata[".tag"] != "file") continue;
-
-				let clientFileMetadata = this.fileMap.get(
-					remoteFileMetadata.path_lower!,
-				);
-
-				let syncStatus = getSyncStatus({
-					clientFileMetadata,
-					remoteFileMetadata,
-				});
-
-				switch (syncStatus) {
-					case SyncStatus.synced:
-						clientFileMetadata!.rev = remoteFileMetadata.rev;
-						break;
-					case SyncStatus.clientAhead:
-						await this.reconcileClientAhead({
-							provider: dropboxProvider,
-							clientFileMetadata: clientFileMetadata!,
-						});
-						break;
-					case SyncStatus.remoteAhead:
-						await this.reconcileRemoteAhead({
-							provider: dropboxProvider,
-							clientFileMetadata: clientFileMetadata!,
-						});
-						break;
-					case SyncStatus.clientNotFound:
-						break;
-				}
-				this.cursor = remoteFiles.cursor;
-			}
+			this.cursor = await this.syncRemoteFiles({
+				provider: dropboxProvider,
+			});
 			/** END STARTUP SYNC **/
 
 			/** SETUP LONGPOLL **/
@@ -293,6 +258,7 @@ export default class ObsidianDropboxConnect extends Plugin {
 	async saveSettings() {
 		await this.saveData(this.settings);
 	}
+	/** END PROVIDER SYNC **/
 
 	/** Helpers **/
 	async buildFileMap(args: {
@@ -318,6 +284,50 @@ export default class ObsidianDropboxConnect extends Plugin {
 				contentHash,
 			});
 		}
+	}
+
+	async syncRemoteFiles(args: {
+		provider: DropboxProvider;
+	}): Promise<string> {
+		const { provider } = args;
+		let remoteFiles = await provider.listFiles(
+			"/" + this.settings.cloudVaultPath,
+		);
+
+		for (let remoteFileMetadata of remoteFiles.files) {
+			// TODO: Extract function
+			if (remoteFileMetadata[".tag"] != "file") continue;
+
+			let clientFileMetadata = this.fileMap.get(
+				remoteFileMetadata.path_lower!,
+			);
+
+			let syncStatus = getSyncStatus({
+				clientFileMetadata,
+				remoteFileMetadata,
+			});
+
+			switch (syncStatus) {
+				case SyncStatus.synced:
+					clientFileMetadata!.rev = remoteFileMetadata.rev;
+					break;
+				case SyncStatus.clientAhead:
+					await this.reconcileClientAhead({
+						provider: provider,
+						clientFileMetadata: clientFileMetadata!,
+					});
+					break;
+				case SyncStatus.remoteAhead:
+					await this.reconcileRemoteAhead({
+						provider: provider,
+						clientFileMetadata: clientFileMetadata!,
+					});
+					break;
+				case SyncStatus.clientNotFound:
+					break;
+			}
+		}
+		return remoteFiles.cursor;
 	}
 	async reconcileClientAhead(args: {
 		provider: DropboxProvider;
