@@ -20,6 +20,8 @@ enum SyncStatus {
 	clientNotFound = "CLIENT_NOT_FOUND",
 }
 
+const LONGPOLL_FREQUENCY = 30000;
+
 export default class ObsidianDropboxConnect extends Plugin {
 	settings: PluginSettings;
 	fileMap = new Map<string, ClientFileData>();
@@ -97,47 +99,10 @@ export default class ObsidianDropboxConnect extends Plugin {
 			/** SETUP LONGPOLL **/
 			// TODO: Dependency inversion to not be specific to dropboxProvider
 			this.registerInterval(
-				window.setInterval(async () => {
-					// TODO: Extract function
-					const { result: longPollResult } =
-						await dropboxProvider.dropbox.filesListFolderLongpoll({
-							cursor: this.cursor,
-						});
-
-					if (!longPollResult.changes) return;
-
-					const { result: filesListFolderResult } =
-						await dropboxProvider.dropbox.filesListFolderContinue({
-							cursor: this.cursor,
-						});
-
-					this.cursor = filesListFolderResult.cursor;
-
-					for (let entry of filesListFolderResult.entries) {
-						// TODO: Implement runtime sync
-						// TODO: Extract function
-						if (entry[".tag"] == "folder") continue;
-
-						// let { result: fileDownloadResult } =
-						// 	await dropboxProvider.dropbox.filesDownload({
-						// 		path: entry.path_lower!,
-						// 	});
-
-						// console.log("download:", fileDownloadResult);
-						//
-						// console.log(
-						// 	"contents:",
-						// 	// @ts-ignore
-						// 	fileDownloadResult.fileBlob.text(),
-						// );
-						let file = this.app.vault.getFileByPath(
-							entry.path_lower!,
-						);
-						if (!file) return;
-					}
-
-					this.cursor = filesListFolderResult.cursor;
-				}, 30000),
+				window.setInterval(
+					() => this.providerLongpll(dropboxProvider),
+					LONGPOLL_FREQUENCY,
+				),
 			);
 		}
 		/** END SETUP LONGPOLL **/
@@ -380,6 +345,44 @@ export default class ObsidianDropboxConnect extends Plugin {
 			await remoteFileContents.fileBlob!.arrayBuffer(),
 			{ mtime: new Date(remoteFileContents.server_modified).valueOf() },
 		);
+	}
+	async providerLongpll(provider: DropboxProvider) {
+		const { result: longPollResult } =
+			await provider.dropbox.filesListFolderLongpoll({
+				cursor: this.cursor,
+			});
+
+		if (!longPollResult.changes) return;
+
+		const { result: filesListFolderResult } =
+			await provider.dropbox.filesListFolderContinue({
+				cursor: this.cursor,
+			});
+
+		this.cursor = filesListFolderResult.cursor;
+
+		for (let entry of filesListFolderResult.entries) {
+			// TODO: Implement runtime sync
+			// TODO: Extract function
+			if (entry[".tag"] == "folder") continue;
+
+			// let { result: fileDownloadResult } =
+			// 	await provider.dropbox.filesDownload({
+			// 		path: entry.path_lower!,
+			// 	});
+
+			// console.log("download:", fileDownloadResult);
+			//
+			// console.log(
+			// 	"contents:",
+			// 	// @ts-ignore
+			// 	fileDownloadResult.fileBlob.text(),
+			// );
+			let file = this.app.vault.getFileByPath(entry.path_lower!);
+			if (!file) return;
+		}
+
+		this.cursor = filesListFolderResult.cursor;
 	}
 	/** END HELPERS **/
 }
