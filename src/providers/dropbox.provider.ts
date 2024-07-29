@@ -1,5 +1,5 @@
 import { Dropbox, DropboxAuth, DropboxResponse, files } from "dropbox";
-import { debounce } from "obsidian";
+import { dropboxContentHasher } from "./dropbox.hasher";
 import { batchProcess, throttleProcess } from "src/utils";
 import type { Folder } from "../types";
 
@@ -12,6 +12,9 @@ type DropboxState = {
 	account: DropboxAccount;
 };
 
+interface FileMetadataExtended extends files.FileMetadata {
+	fileBlob?: Blob;
+}
 const BATCH_DELAY_TIME = 1000;
 const THROTTLE_DELAY_TIME = 500;
 
@@ -31,6 +34,7 @@ export class DropboxProvider {
 	dropbox: Dropbox;
 	dropboxAuth: DropboxAuth;
 	state = {} as DropboxState;
+	revMap = new Map<string, string>();
 
 	static resetInstance() {
 		instance = undefined;
@@ -159,6 +163,29 @@ export class DropboxProvider {
 		});
 	}
 
+	listFiles(root = "") {
+		return this.dropbox
+			.filesListFolder({ path: root, recursive: true })
+			.then((res) => {
+				const files = res.result.entries.filter(
+					(entry) => entry[".tag"] === "file",
+				);
+
+				return {
+					files,
+					cursor: res.result.cursor,
+				};
+			})
+			.catch((e: any) => {
+				console.error("listFolders error:", e);
+				throw new Error(DROPBOX_PROVIDER_ERRORS.resourceAccessError);
+			});
+	}
+
+	downloadFile(args: { path: string }): Promise<FileMetadataExtended> {
+		const { path } = args;
+		return this.dropbox.filesDownload({ path }).then((res) => res.result);
+	}
 	getUserInfo(): Promise<void> {
 		return this.dropbox
 			.usersGetCurrentAccount()
@@ -210,10 +237,34 @@ export class DropboxProvider {
 				// if the process was successful. this will require a quing process
 				// for the plugin to continue to check if there are sync issues
 				console.log("filesCreateFolderBatch Res:", res);
+				// @ts-ignore
+				this.watchForBatchToComplete(res.result.async_job_id);
 			})
 			.catch((e: any) => {
 				console.error("Dropbox filesCreateFolderBatch Error:", e);
 			});
+	}
+
+	async watchForBatchToComplete(
+		batchId: string,
+		//callback: (args: files.RelocationBatchResultEntry) => void
+	) {
+		let intervalId = setInterval(() => {
+			console.log("Ping...");
+			this._watchForBatchToComplete(batchId).then((res) => {
+				if (res.result[".tag"] == "complete") {
+					clearInterval(intervalId);
+					// iterate over entries to make sure everything was successful
+					// for (let entry of res.result.entries){
+					// 	callback(entry);
+					// }
+				}
+			});
+		}, 2000);
+	}
+
+	private _watchForBatchToComplete(batchId: string) {
+		return this.dropbox.filesMoveBatchCheckV2({ async_job_id: batchId });
 	}
 
 	batchDeleteFolderOrFile = batchProcess(
@@ -235,25 +286,99 @@ export class DropboxProvider {
 				console.error("Dropbox filesDeleteBatch Error:", e);
 			});
 	}
-
 	createFile = throttleProcess(
 		this._createFile.bind(this),
 		THROTTLE_DELAY_TIME,
 	);
 
-	private _createFile(path: string, contents: ArrayBuffer) {
-		this.dropbox
+	private _createFile({
+		path,
+		contents,
+		callback,
+	}: {
+		path: string;
+		contents: string;
+		callback: (args: files.FileMetadata) => void;
+	}) {
+		return this.dropbox
 			.filesUpload({
 				path: path,
 				contents: contents,
 			})
-			.then((res) => {
-				console.log("filesUpload Res:", res);
+			.then((res) => callback(res.result))
+			.catch((e: any) => {
+				console.error("Dropbox filesUpload Error:", e);
+			});
+	}
+
+	modifyFile({
+		path,
+		contents,
+		rev,
+	}: {
+		path: string;
+		contents: ArrayBuffer;
+		rev: string;
+	}) {
+		console.log("modifyFile:", path, contents, rev);
+		return this.dropbox
+			.filesUpload({
+				mode: {
+					".tag": "update",
+					update: rev,
+				},
+				path: path,
+				contents: new Blob([contents]),
 			})
 			.catch((e: any) => {
 				console.error("Dropbox filesUpload Error:", e);
 			});
 	}
 
-	modifyFile() {}
+	overwriteFile(args: { path: string; contents: ArrayBuffer }) {
+		console.log("overwriteFile:", args.path, args.contents);
+		return this.dropbox
+			.filesUpload({
+				mode: {
+					".tag": "overwrite",
+				},
+				path: args.path,
+				contents: new Blob([args.contents]),
+			})
+			.catch((e: any) => {
+				console.error("Dropbox filesUpload Error:", e);
+			});
+	}
+
+	async sync(path: string) {
+		// call listfolders and populate revMap
+		let res = await this.dropbox.filesListFolder({ path, recursive: true });
+		do {
+			for (let entry of res.result.entries) {
+				console.log(entry);
+			}
+			res = await this.dropbox.filesListFolderContinue({
+				cursor: res.result.cursor,
+			});
+		} while (res.result.has_more);
+	}
+
+	getFileMetadata(args: {
+		path: string;
+	}): Promise<files.FileMetadataReference> {
+		return this.dropbox
+			.filesGetMetadata({
+				path: args.path,
+			})
+			.then((res) => {
+				if (res.result[".tag"] != "file") {
+					throw new Error("Error: file metadata does not exist");
+				}
+				return res.result;
+			});
+	}
+
+	createDropboxContentHash(args: { fileData: ArrayBuffer }) {
+		return dropboxContentHasher(args.fileData);
+	}
 }
