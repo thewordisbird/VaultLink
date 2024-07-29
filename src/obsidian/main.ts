@@ -11,13 +11,17 @@ interface ClientFileData extends TFile {
 }
 
 // TODO: Define this type - should not bring dropbox contents into this file
-interface RemoteFileData extends files.FileMetadataReference {}
+type RemoteFileData =
+	| files.FileMetadataReference
+	| files.FolderMetadataReference
+	| files.DeletedMetadataReference;
 
 enum SyncStatus {
 	synced = "SYNCED",
 	clientAhead = "CLIENT_AHEAD",
 	remoteAhead = "REMOTE_AHEAD",
 	clientNotFound = "CLIENT_NOT_FOUND",
+	deletedOnServer = "DELETED_ON_SERVER",
 }
 
 const LONGPOLL_FREQUENCY = 30000;
@@ -100,7 +104,7 @@ export default class ObsidianDropboxConnect extends Plugin {
 			// TODO: Dependency inversion to not be specific to dropboxProvider
 			this.registerInterval(
 				window.setInterval(
-					() => this.providerLongpll(dropboxProvider),
+					() => this.providerLongpoll(dropboxProvider),
 					LONGPOLL_FREQUENCY,
 				),
 			);
@@ -131,11 +135,17 @@ export default class ObsidianDropboxConnect extends Plugin {
 									callback: (res: any) => {
 										// @ts-ignore
 										this.fileMap.set(res.path_lower, {
+											...folderOrFile,
 											// @ts-ignore
 											rev: res.rev,
 											// @ts-ignore
 											contentHash: res.content_hash,
 										});
+
+										console.log(
+											"fileMap after LP sync:",
+											this.fileMap,
+										);
 									},
 								});
 							});
@@ -187,7 +197,14 @@ export default class ObsidianDropboxConnect extends Plugin {
 				let syncData = this.fileMap.get(fromPath.toLowerCase());
 				if (!syncData) return;
 				this.fileMap.delete(fromPath.toLowerCase());
-				this.fileMap.set(toPath.toLowerCase(), { ...syncData });
+				this.fileMap.set(toPath.toLowerCase(), {
+					...syncData,
+					...folderOrFile,
+				});
+				console.log(
+					"fileMap data:",
+					this.fileMap.get(toPath.toLowerCase()),
+				);
 
 				dropboxProvider.batchRenameFolderOrFile({
 					from_path: fromPath,
@@ -249,6 +266,7 @@ export default class ObsidianDropboxConnect extends Plugin {
 				contentHash,
 			});
 		}
+		console.log("filMap initial:", this.fileMap);
 	}
 
 	async syncRemoteFiles(args: {
@@ -267,33 +285,55 @@ export default class ObsidianDropboxConnect extends Plugin {
 				remoteFileMetadata.path_lower!,
 			);
 
-			let syncStatus = getSyncStatus({
+			this.syncRemoteFile({
+				provider,
 				clientFileMetadata,
 				remoteFileMetadata,
 			});
-
-			switch (syncStatus) {
-				case SyncStatus.synced:
-					clientFileMetadata!.rev = remoteFileMetadata.rev;
-					break;
-				case SyncStatus.clientAhead:
-					await this.reconcileClientAhead({
-						provider: provider,
-						clientFileMetadata: clientFileMetadata!,
-					});
-					break;
-				case SyncStatus.remoteAhead:
-					await this.reconcileRemoteAhead({
-						provider: provider,
-						clientFileMetadata: clientFileMetadata!,
-					});
-					break;
-				case SyncStatus.clientNotFound:
-					break;
-			}
 		}
 		return remoteFiles.cursor;
 	}
+
+	async syncRemoteFile(args: {
+		provider: DropboxProvider;
+		clientFileMetadata: ClientFileData | undefined;
+		remoteFileMetadata: RemoteFileData;
+	}) {
+		let syncStatus = getSyncStatus({
+			clientFileMetadata: args.clientFileMetadata,
+			remoteFileMetadata: args.remoteFileMetadata,
+		});
+
+		switch (syncStatus) {
+			case SyncStatus.deletedOnServer:
+				await this.reconcileDeletedOnServer({
+					provider: args.provider,
+					clientFileMetadata: args.clientFileMetadata,
+					remoteFileMetadata: args.remoteFileMetadata,
+				});
+				break;
+			case SyncStatus.synced:
+				if (args.remoteFileMetadata[".tag"] == "file") {
+					args.clientFileMetadata!.rev = args.remoteFileMetadata.rev;
+				}
+				break;
+			case SyncStatus.clientAhead:
+				await this.reconcileClientAhead({
+					provider: args.provider,
+					clientFileMetadata: args.clientFileMetadata!,
+				});
+				break;
+			case SyncStatus.remoteAhead:
+				await this.reconcileRemoteAhead({
+					provider: args.provider,
+					clientFileMetadata: args.clientFileMetadata!,
+				});
+				break;
+			case SyncStatus.clientNotFound:
+				break;
+		}
+	}
+
 	async reconcileClientAhead(args: {
 		provider: DropboxProvider;
 		clientFileMetadata: ClientFileData;
@@ -345,8 +385,31 @@ export default class ObsidianDropboxConnect extends Plugin {
 			await remoteFileContents.fileBlob!.arrayBuffer(),
 			{ mtime: new Date(remoteFileContents.server_modified).valueOf() },
 		);
+
+		clientFileMetadata!.rev = remoteFileContents.rev;
+		clientFileMetadata!.contentHash = remoteFileContents.content_hash!;
 	}
-	async providerLongpll(provider: DropboxProvider) {
+
+	async reconcileDeletedOnServer(args: {
+		provider: DropboxProvider;
+		clientFileMetadata: ClientFileData | undefined;
+		remoteFileMetadata: RemoteFileData;
+	}) {
+		const clientFile = this.app.vault.getFileByPath(
+			args.clientFileMetadata?.path!,
+		);
+		console.log("reconcileDeletedOnServer - clientFile:", clientFile);
+		console.log(
+			"reconcileDeletedOnServer - remoteFileMetadata:",
+			args.remoteFileMetadata,
+		);
+		if (clientFile) {
+			this.app.vault.delete(clientFile);
+			this.fileMap.delete("/" + clientFile.path.toLowerCase());
+		}
+	}
+
+	async providerLongpoll(provider: DropboxProvider) {
 		const { result: longPollResult } =
 			await provider.dropbox.filesListFolderLongpoll({
 				cursor: this.cursor,
@@ -354,35 +417,43 @@ export default class ObsidianDropboxConnect extends Plugin {
 
 		if (!longPollResult.changes) return;
 
+		this.cursor = await this.syncRemoteFilesLongPoll({ provider });
+	}
+
+	async syncRemoteFilesLongPoll(args: {
+		provider: DropboxProvider;
+	}): Promise<string> {
+		const { provider } = args;
 		const { result: filesListFolderResult } =
 			await provider.dropbox.filesListFolderContinue({
 				cursor: this.cursor,
 			});
-
-		this.cursor = filesListFolderResult.cursor;
-
-		for (let entry of filesListFolderResult.entries) {
-			// TODO: Implement runtime sync
+		// TODO: Refactor to include has_more
+		console.log("fileMap pre LP sync:", this.fileMap);
+		for (let remoteFileMetadata of filesListFolderResult.entries) {
 			// TODO: Extract function
-			if (entry[".tag"] == "folder") continue;
+			//if (remoteFileMetadata[".tag"] != "file") continue;
 
-			// let { result: fileDownloadResult } =
-			// 	await provider.dropbox.filesDownload({
-			// 		path: entry.path_lower!,
-			// 	});
+			console.log(
+				"syncRemoteFilesLongPoll - remoteFileMetadata:",
+				remoteFileMetadata,
+			);
+			let clientFileMetadata = this.fileMap.get(
+				remoteFileMetadata.path_lower!,
+			);
+			console.log(
+				"syncRemoteFilesLongPoll - clientFileMetadata:",
+				clientFileMetadata,
+			);
 
-			// console.log("download:", fileDownloadResult);
-			//
-			// console.log(
-			// 	"contents:",
-			// 	// @ts-ignore
-			// 	fileDownloadResult.fileBlob.text(),
-			// );
-			let file = this.app.vault.getFileByPath(entry.path_lower!);
-			if (!file) return;
+			this.syncRemoteFile({
+				provider,
+				clientFileMetadata,
+				// @ts-ignore
+				remoteFileMetadata,
+			});
 		}
-
-		this.cursor = filesListFolderResult.cursor;
+		return filesListFolderResult.cursor;
 	}
 	/** END HELPERS **/
 }
@@ -392,26 +463,32 @@ function getSyncStatus(args: {
 	remoteFileMetadata: RemoteFileData;
 }): SyncStatus {
 	const { clientFileMetadata, remoteFileMetadata } = args;
-	if (clientFileMetadata == undefined) {
-		return SyncStatus.clientNotFound;
+	if (remoteFileMetadata[".tag"] == "deleted") {
+		return SyncStatus.deletedOnServer;
 	}
 
-	if (clientFileMetadata.contentHash == remoteFileMetadata.content_hash) {
-		return SyncStatus.synced;
-	}
+	if (remoteFileMetadata[".tag"] == "file") {
+		if (clientFileMetadata == undefined) {
+			return SyncStatus.clientNotFound;
+		}
 
-	if (
-		new Date(clientFileMetadata?.stat.mtime) >
-		new Date(remoteFileMetadata.server_modified)
-	) {
-		return SyncStatus.clientAhead;
-	}
+		if (clientFileMetadata.contentHash == remoteFileMetadata.content_hash) {
+			return SyncStatus.synced;
+		}
 
-	if (
-		new Date(clientFileMetadata?.stat.mtime) <
-		new Date(remoteFileMetadata.server_modified)
-	) {
-		return SyncStatus.remoteAhead;
+		if (
+			new Date(clientFileMetadata?.stat.mtime) >
+			new Date(remoteFileMetadata.server_modified)
+		) {
+			return SyncStatus.clientAhead;
+		}
+
+		if (
+			new Date(clientFileMetadata?.stat.mtime) <
+			new Date(remoteFileMetadata.server_modified)
+		) {
+			return SyncStatus.remoteAhead;
+		}
 	}
 	throw new Error("Sync Error - Invalid sync condition");
 }
