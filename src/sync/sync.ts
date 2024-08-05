@@ -254,6 +254,7 @@ export class Sync {
 		folderOrFile: TAbstractFile;
 		ctx: string;
 	}) {
+		console.log("reconcileMoveFileOnCliend:", args);
 		if (!this.fileMap) {
 			throw new Error("Sync Error: fileMap not initialized");
 		}
@@ -280,7 +281,13 @@ export class Sync {
 		this.fileMap.set(toPath, {
 			...syncData,
 			...args.folderOrFile,
+			clientPath: this.convertRemoteToClientPath({ remotePath: toPath }),
+			remotePath: toPath,
 		});
+
+		console.log("fileMap - rename:", this.fileMap);
+		console.log("syncData:", syncData);
+		console.log("args.folderOrFile:", args.folderOrFile);
 	}
 
 	reconcileDeletedOnClient(args: { folderOrFile: TAbstractFile }) {
