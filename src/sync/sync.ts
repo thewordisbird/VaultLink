@@ -34,6 +34,7 @@ export class Sync {
 	fileMap: Map<RemoteFilePath, FileSyncMetadata> | undefined;
 	obsidianApp: App;
 	settings: PluginSettings;
+	_cursor: string | null;
 
 	constructor(args: {
 		obsidianApp: App;
@@ -64,11 +65,6 @@ export class Sync {
 				filePath: clientFolderOrFile.path,
 			});
 
-			let sanitizedClientPath = this.sanitizeClientPath({
-				vaultRoot: this.settings.cloudVaultPath!,
-				filePath: clientFolderOrFile.path,
-			});
-
 			this.fileMap.set(sanitizedRemotePath, {
 				...clientFolderOrFile,
 				//clientPath: sanitizedClientPath,
@@ -79,12 +75,20 @@ export class Sync {
 		}
 	}
 
-	async syncRemoteFiles(): Promise<string> {
+	async syncRemoteFiles(): Promise<void> {
 		if (!this.fileMap) {
 			throw new Error("Sync Error: fileMap not initialized");
 		}
 
+		// if (this.cursor) {
+		// 	console.log(
+		// 		"syncRemoteFiles -> syncRemoteFilesLongpoll:",
+		// 		this.cursor,
+		// 	);
+		// 	this.syncRemoteFilesLongPoll({ cursor: this.cursor });
+		// } else {
 		// TODO: This returns a dropbox specific path - will need to be generalized for additional providers
+		console.log("syncRemoteFiles standard", this.cursor);
 		let remoteFiles = await this.provider.listFiles({
 			// TODO: the path should include the "/"
 			vaultRoot: "/" + this.settings.cloudVaultPath,
@@ -104,10 +108,12 @@ export class Sync {
 				remoteFileMetadata,
 			});
 		}
-		return remoteFiles.cursor;
+
+		this.cursor = remoteFiles.cursor;
+		// }
 	}
 
-	async syncRemoteFilesLongPoll(args: { cursor: string }): Promise<string> {
+	async syncRemoteFilesLongPoll(args: { cursor: string }): Promise<void> {
 		console.log("syncRemoteFilesLongPoll:", args);
 		if (!this.fileMap) {
 			throw new Error("Sync Error: fileMap not initialized");
@@ -135,7 +141,7 @@ export class Sync {
 			});
 		}
 
-		return remoteFiles.cursor;
+		this.cursor = remoteFiles.cursor;
 	}
 
 	async syncRemoteFile(args: {
@@ -170,6 +176,9 @@ export class Sync {
 				});
 				break;
 			case SyncStatus.clientNotFound:
+				await this.reconcileClientNotFound({
+					remoteFileMetadata: args.remoteFileMetadata,
+				});
 				break;
 		}
 	}
@@ -405,6 +414,55 @@ export class Sync {
 		console.log("reconcileRemoteAhead - END:", this.fileMap);
 	}
 
+	async reconcileClientNotFound(args: {
+		remoteFileMetadata: RemoteFileData;
+	}) {
+		console.log("reconcileClientNotFound - START:", args);
+
+		if (!this.fileMap) {
+			throw new Error("Sync Error: fileMap not initialized");
+		}
+
+		const remoteFileContents = await this.provider.downloadFile({
+			path: args.remoteFileMetadata.path_lower!,
+		});
+
+		console.log("remoteFileContents:", remoteFileContents);
+
+		const sanitizedRemotePath = this.sanitizeRemotePath({
+			vaultRoot: this.settings.cloudVaultPath,
+			filePath: remoteFileContents.path_lower!,
+		});
+
+		const sanitizedClientPath = this.convertRemoteToClientPath({
+			remotePath: sanitizedRemotePath,
+		});
+
+		try {
+			console.log("sanitizedClientPath:", sanitizedClientPath);
+			const clientFileMetadata =
+				await this.obsidianApp.vault.createBinary(
+					sanitizedClientPath,
+					await remoteFileContents.fileBlob!.arrayBuffer(),
+					{
+						mtime: new Date(
+							remoteFileContents.server_modified,
+						).valueOf(),
+					},
+				);
+			this.fileMap.set(sanitizedRemotePath, {
+				...clientFileMetadata,
+				remotePath: sanitizedRemotePath,
+				fileHash: remoteFileContents.content_hash!,
+				rev: remoteFileContents.rev,
+			});
+		} catch (e) {
+			console.error("WHOOPS!", e);
+		}
+
+		console.log("reconcileClientNotFound - END:", this.fileMap);
+	}
+
 	sanitizeRemotePath(args: {
 		vaultRoot?: string;
 		filePath: string;
@@ -416,14 +474,8 @@ export class Sync {
 		return `/${args.vaultRoot}/${args.filePath}`.toLowerCase() as RemoteFilePath;
 	}
 
-	sanitizeClientPath(args: {
-		vaultRoot?: string;
-		filePath: string;
-	}): ClientFilePath {
-		if (args.vaultRoot == undefined) {
-			return args.filePath.toLowerCase() as ClientFilePath;
-		}
-		return `${args.vaultRoot}/${args.filePath}`.toLowerCase() as ClientFilePath;
+	sanitizeClientPath(args: { filePath: string }): ClientFilePath {
+		return args.filePath.toLowerCase() as ClientFilePath;
 	}
 
 	convertClientToRemotePath(args: {
@@ -435,6 +487,28 @@ export class Sync {
 	convertRemoteToClientPath(args: {
 		remotePath: RemoteFilePath;
 	}): ClientFilePath {
-		return args.remotePath.slice(1) as ClientFilePath;
+		return args.remotePath.split("/").slice(4).join("/") as ClientFilePath;
+		//return args.remotePath.slice(1) as ClientFilePath;
+	}
+
+	public set cursor(cursor: string | null) {
+		console.log("setting cursor:", cursor);
+		this._cursor = cursor;
+		if (cursor) {
+			window.localStorage.setItem("cursor", cursor);
+		} else {
+			window.localStorage.removeItem("cursor");
+		}
+	}
+
+	public get cursor() {
+		if (this._cursor) {
+			console.log("getting cursor:", this._cursor);
+			return this._cursor;
+		}
+
+		this._cursor = window.localStorage.getItem("cursor");
+		console.log("getting cursor:", this._cursor);
+		return this._cursor;
 	}
 }

@@ -10,7 +10,6 @@ const LONGPOLL_FREQUENCY = 30000;
 
 export default class ObsidianDropboxConnect extends Plugin {
 	settings: PluginSettings;
-	cursor: string;
 
 	async onload() {
 		await this.loadSettings();
@@ -75,10 +74,12 @@ export default class ObsidianDropboxConnect extends Plugin {
 		if (await dropboxProvider.getAuthorizationState()) {
 			/** STARTUP SYNC **/
 			// build fileMap from the client files
+			console.log("Start Startup Sync");
 			const clientFoldersOrFiles = this.app.vault.getAllLoadedFiles();
 
 			fileSync.initializeFileMap({ clientFoldersOrFiles });
-			this.cursor = await fileSync.syncRemoteFiles();
+
+			await fileSync.syncRemoteFiles();
 			/** END STARTUP SYNC **/
 
 			/** SETUP LONGPOLL **/
@@ -87,17 +88,13 @@ export default class ObsidianDropboxConnect extends Plugin {
 				window.setInterval(() => {
 					dropboxProvider.dropbox
 						.filesListFolderLongpoll({
-							cursor: this.cursor,
+							cursor: fileSync.cursor!,
 						})
 						.then((res) => {
 							if (!res.result.changes) return;
 							return fileSync.syncRemoteFilesLongPoll({
-								cursor: this.cursor,
+								cursor: fileSync.cursor!,
 							});
-						})
-						.then((cursor) => {
-							if (!cursor) return;
-							this.cursor = cursor;
 						});
 				}, LONGPOLL_FREQUENCY),
 			);
