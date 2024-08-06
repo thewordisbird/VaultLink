@@ -10,7 +10,7 @@ type ClientFilePath = string & { [__brand]: "client path" };
 type RemoteFilePath = string & { [__brand]: "remote path" };
 
 type FileSyncMetadata = TFile & {
-	clientPath: ClientFilePath;
+	//clientPath: ClientFilePath;
 	remotePath: RemoteFilePath;
 	rev: string | undefined;
 	fileHash: string | undefined;
@@ -71,7 +71,7 @@ export class Sync {
 
 			this.fileMap.set(sanitizedRemotePath, {
 				...clientFolderOrFile,
-				clientPath: sanitizedClientPath,
+				//clientPath: sanitizedClientPath,
 				remotePath: sanitizedRemotePath,
 				fileHash,
 				rev: undefined,
@@ -108,6 +108,7 @@ export class Sync {
 	}
 
 	async syncRemoteFilesLongPoll(args: { cursor: string }): Promise<string> {
+		console.log("syncRemoteFilesLongPoll:", args);
 		if (!this.fileMap) {
 			throw new Error("Sync Error: fileMap not initialized");
 		}
@@ -116,9 +117,10 @@ export class Sync {
 			// TODO: the path should include the "/"
 			cursor: args.cursor,
 		});
-
+		console.log("remoteFiles:", remoteFiles);
 		// TODO: Refactor to include has_more
 		for (let remoteFileMetadata of remoteFiles.files) {
+			console.log("remoteFileMetadata:", remoteFileMetadata);
 			// This is copied from above. just a reminder if we need a tag check
 			//if (remoteFileMetadata[".tag"] != "file") continue;
 
@@ -228,9 +230,7 @@ export class Sync {
 			function callback(res: files.FileMetadata) {
 				this.fileMap.set(sanitizedRemotePath, {
 					...(args.folderOrFile as TFile),
-					clientPath: this.convertRemoteToClientPath({
-						remotePath: sanitizedRemotePath,
-					}),
+					clientPath: args.folderOrFile.path,
 					remotePath: sanitizedRemotePath,
 					rev: res.rev,
 					fileHash: res.content_hash!,
@@ -281,7 +281,7 @@ export class Sync {
 		this.fileMap.set(toPath, {
 			...syncData,
 			...args.folderOrFile,
-			clientPath: this.convertRemoteToClientPath({ remotePath: toPath }),
+			//clientPath: this.convertRemoteToClientPath({ remotePath: toPath }),
 			remotePath: toPath,
 		});
 
@@ -309,14 +309,17 @@ export class Sync {
 		clientFileMetadata: FileSyncMetadata | undefined;
 		remoteFileMetadata: RemoteFileData;
 	}) {
+		console.log("reconcileDeletedOnServer:", args);
 		if (!this.fileMap) {
 			throw new Error("Sync Error: fileMap not initialized");
 		}
 
 		if (args.clientFileMetadata == undefined) return;
 		const clientFile = this.obsidianApp.vault.getFileByPath(
-			args.clientFileMetadata.clientPath,
+			args.clientFileMetadata.path,
 		);
+
+		console.log("GET - clientFile:", clientFile);
 
 		if (!clientFile) return;
 		this.obsidianApp.vault.delete(clientFile);
@@ -358,6 +361,7 @@ export class Sync {
 			clientFileMetadata.path,
 		);
 
+		console.log("GET - clientFile:", clientFile);
 		let clientFileContents = await this.obsidianApp.vault.readBinary(
 			clientFile!,
 		);
@@ -374,11 +378,15 @@ export class Sync {
 	}
 
 	async reconcileRemoteAhead(args: { clientFileMetadata: FileSyncMetadata }) {
+		console.log("reconcileRemoteAhead - START:", args);
+
 		if (args.clientFileMetadata == undefined) return;
 
 		const clientFile = this.obsidianApp.vault.getFileByPath(
-			args.clientFileMetadata.clientPath,
+			args.clientFileMetadata.path,
 		);
+		console.log("GET - clientFile:", clientFile);
+
 		const remoteFileContents = await this.provider.downloadFile({
 			path: args.clientFileMetadata.remotePath,
 		});
@@ -394,6 +402,7 @@ export class Sync {
 
 		args.clientFileMetadata.rev = remoteFileContents.rev;
 		args.clientFileMetadata.fileHash = remoteFileContents.content_hash!;
+		console.log("reconcileRemoteAhead - END:", this.fileMap);
 	}
 
 	sanitizeRemotePath(args: {

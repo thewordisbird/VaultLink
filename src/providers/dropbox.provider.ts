@@ -171,12 +171,8 @@ export class DropboxProvider implements Provider {
 		return this.dropbox
 			.filesListFolder({ path: args.vaultRoot, recursive: true })
 			.then((res) => {
-				const files = res.result.entries.filter(
-					(entry) => entry[".tag"] === "file",
-				);
-
 				return {
-					files,
+					files: res.result.entries,
 					cursor: res.result.cursor,
 				};
 			})
@@ -192,12 +188,8 @@ export class DropboxProvider implements Provider {
 				cursor: args.cursor,
 			})
 			.then((res) => {
-				const files = res.result.entries.filter(
-					(entry) => entry[".tag"] === "file",
-				);
-
 				return {
-					files,
+					files: res.result.entries,
 					cursor: res.result.cursor,
 				};
 			})
