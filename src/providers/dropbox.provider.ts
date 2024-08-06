@@ -2,6 +2,9 @@ import { Dropbox, DropboxAuth, DropboxResponse, files } from "dropbox";
 import { dropboxContentHasher } from "./dropbox.hasher";
 import { batchProcess, throttleProcess } from "src/utils";
 import type { Folder } from "../types";
+import { Provider } from "./types";
+
+// TODO: All listfolder, listFiles, listFilesContinue need to consider has_more
 
 type DropboxAccount = {
 	accountId: string;
@@ -12,7 +15,7 @@ type DropboxState = {
 	account: DropboxAccount;
 };
 
-interface FileMetadataExtended extends files.FileMetadata {
+export interface FileMetadataExtended extends files.FileMetadata {
 	fileBlob?: Blob;
 }
 const BATCH_DELAY_TIME = 1000;
@@ -30,7 +33,8 @@ export const DROPBOX_PROVIDER_ERRORS = {
 
 let instance: DropboxProvider | undefined;
 
-export class DropboxProvider {
+// @ts-ignore
+export class DropboxProvider implements Provider {
 	dropbox: Dropbox;
 	dropboxAuth: DropboxAuth;
 	state = {} as DropboxState;
@@ -163,21 +167,34 @@ export class DropboxProvider {
 		});
 	}
 
-	listFiles(root = "") {
+	listFiles(args: { vaultRoot: string }) {
 		return this.dropbox
-			.filesListFolder({ path: root, recursive: true })
+			.filesListFolder({ path: args.vaultRoot, recursive: true })
 			.then((res) => {
-				const files = res.result.entries.filter(
-					(entry) => entry[".tag"] === "file",
-				);
-
 				return {
-					files,
+					files: res.result.entries,
 					cursor: res.result.cursor,
 				};
 			})
 			.catch((e: any) => {
 				console.error("listFolders error:", e);
+				throw new Error(DROPBOX_PROVIDER_ERRORS.resourceAccessError);
+			});
+	}
+
+	listFilesContinue(args: { cursor: string }) {
+		return this.dropbox
+			.filesListFolderContinue({
+				cursor: args.cursor,
+			})
+			.then((res) => {
+				return {
+					files: res.result.entries,
+					cursor: res.result.cursor,
+				};
+			})
+			.catch((e: any) => {
+				console.error("listFoldersContinue error:", e);
 				throw new Error(DROPBOX_PROVIDER_ERRORS.resourceAccessError);
 			});
 	}
@@ -311,6 +328,7 @@ export class DropboxProvider {
 			});
 	}
 
+	/*
 	modifyFile({
 		path,
 		contents,
@@ -335,12 +353,28 @@ export class DropboxProvider {
 			});
 	}
 
+	// TODO: rename to updateFile
 	overwriteFile(args: { path: string; contents: ArrayBuffer }) {
 		console.log("overwriteFile:", args.path, args.contents);
 		return this.dropbox
 			.filesUpload({
 				mode: {
 					".tag": "overwrite",
+				},
+				path: args.path,
+				contents: new Blob([args.contents]),
+			})
+			.catch((e: any) => {
+				console.error("Dropbox filesUpload Error:", e);
+			});
+	}
+	*/
+	updateFile(args: { path: string; rev: string; contents: ArrayBuffer }) {
+		return this.dropbox
+			.filesUpload({
+				mode: {
+					".tag": "update",
+					update: args.rev,
 				},
 				path: args.path,
 				contents: new Blob([args.contents]),
@@ -378,7 +412,12 @@ export class DropboxProvider {
 			});
 	}
 
+	// DEPRECIATED
 	createDropboxContentHash(args: { fileData: ArrayBuffer }) {
+		return dropboxContentHasher(args.fileData);
+	}
+
+	createFileHash(args: { fileData: ArrayBuffer }) {
 		return dropboxContentHasher(args.fileData);
 	}
 }
