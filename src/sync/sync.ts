@@ -80,37 +80,20 @@ export class Sync {
 			throw new Error("Sync Error: fileMap not initialized");
 		}
 
-		// if (this.cursor) {
-		// 	console.log(
-		// 		"syncRemoteFiles -> syncRemoteFilesLongpoll:",
-		// 		this.cursor,
-		// 	);
-		// 	this.syncRemoteFilesLongPoll({ cursor: this.cursor });
-		// } else {
 		// TODO: This returns a dropbox specific path - will need to be generalized for additional providers
-		console.log("syncRemoteFiles standard", this.cursor);
+		// TODO: Refactor to include has_more
 		let remoteFiles = await this.provider.listFiles({
 			// TODO: the path should include the "/"
 			vaultRoot: "/" + this.settings.cloudVaultPath,
 		});
 
-		for (let remoteFileMetadata of remoteFiles.files) {
-			/* This taggins system is specific to dropbox. As additional Providers are added a plugin tagging system should be implemented. */
-			if (remoteFileMetadata[".tag"] != "file") continue;
-
-			let sanitizedRemotePath = this.sanitizeRemotePath({
-				filePath: remoteFileMetadata.path_lower!,
-			});
-			let clientFileMetadata = this.fileMap.get(sanitizedRemotePath);
-
-			this.syncRemoteFile({
-				clientFileMetadata,
-				remoteFileMetadata,
-			});
+		this.syncFiles({ remoteFiles });
+		// Check for changes that occured while not using the app
+		if (this.cursor) {
+			await this.syncRemoteFilesLongPoll({ cursor: this.cursor });
 		}
 
 		this.cursor = remoteFiles.cursor;
-		// }
 	}
 
 	async syncRemoteFilesLongPoll(args: { cursor: string }): Promise<void> {
@@ -119,32 +102,51 @@ export class Sync {
 			throw new Error("Sync Error: fileMap not initialized");
 		}
 
+		// TODO: Refactor to include has_more
 		let remoteFiles = await this.provider.listFilesContinue({
-			// TODO: the path should include the "/"
 			cursor: args.cursor,
 		});
 		console.log("remoteFiles:", remoteFiles);
-		// TODO: Refactor to include has_more
-		for (let remoteFileMetadata of remoteFiles.files) {
-			console.log("remoteFileMetadata:", remoteFileMetadata);
-			// This is copied from above. just a reminder if we need a tag check
-			//if (remoteFileMetadata[".tag"] != "file") continue;
+
+		await this.syncFiles({ remoteFiles });
+		this.cursor = remoteFiles.cursor;
+	}
+
+	async syncFiles(args: {
+		remoteFiles: {
+			files: (
+				| files.FileMetadataReference
+				| files.FolderMetadataReference
+				| files.DeletedMetadataReference
+			)[];
+			cursor: string;
+		};
+	}) {
+		if (!this.fileMap) {
+			throw new Error("Sync Error: fileMap not initialized");
+		}
+		const toSync = [];
+		for (let remoteFileMetadata of args.remoteFiles.files) {
+			/* This taggins system is specific to dropbox. As additional Providers are added a plugin tagging system should be implemented. */
+			// if (remoteFileMetadata[".tag"] != "file") continue;
 
 			let sanitizedRemotePath = this.sanitizeRemotePath({
 				filePath: remoteFileMetadata.path_lower!,
 			});
 			let clientFileMetadata = this.fileMap.get(sanitizedRemotePath);
 
-			this.syncRemoteFile({
-				clientFileMetadata,
-				remoteFileMetadata,
-			});
+			toSync.push(
+				this.syncFile({
+					clientFileMetadata,
+					remoteFileMetadata,
+				}),
+			);
 		}
 
-		this.cursor = remoteFiles.cursor;
+		await Promise.allSettled(toSync);
 	}
 
-	async syncRemoteFile(args: {
+	async syncFile(args: {
 		clientFileMetadata: FileSyncMetadata | undefined;
 		remoteFileMetadata: RemoteFileData;
 	}) {
