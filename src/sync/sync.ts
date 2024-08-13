@@ -339,16 +339,6 @@ export class Sync {
 			throw new Error("Sync Error: fileMap not initialized");
 		}
 
-		/*
-		 * 1. convert remote path to client path
-		 * 2. getClientFolderOrFile
-		 * 3. delete from vault
-		 * 4. If folder:
-		 *	a. Delete from fileMap (Maybe this is not needed - can just error on folder lookup)
-		 *
-		 *
-		 */
-
 		const sanitizedRemotePath = this.sanitizeRemotePath({
 			vaultRoot: this.settings.cloudVaultPath,
 			filePath: args.remoteFileMetadata.path_lower!,
@@ -366,27 +356,10 @@ export class Sync {
 				this.obsidianApp.vault.getFolderByPath(sanitizedClientPath);
 		}
 
-		console.log("folderOrFile:", folderOrFile);
-		//if (!folderOrFile) return;
+		if (!folderOrFile) return;
 
-		if (!folderOrFile) {
-			console.log("null folderOrFile");
-			return;
-		}
 		await this.obsidianApp.vault.delete(folderOrFile, true);
 		this.fileMap.delete(sanitizedRemotePath);
-		/*
-		if (args.clientFileMetadata) return;
-		const clientFile = this.obsidianApp.vault.getFileByPath(
-			args.clientFileMetadata.path,
-		);
-
-		console.log("GET - clientFile:", clientFile);
-
-		if (!clientFile) return;
-		this.obsidianApp.vault.delete(clientFile);
-		this.fileMap.delete(args.clientFileMetadata.remotePath);
-		*/
 	}
 
 	reconcileClientAhead(args: { clientFile: TAbstractFile }): Promise<void>;
