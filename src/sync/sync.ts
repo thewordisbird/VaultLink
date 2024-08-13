@@ -28,6 +28,7 @@ enum SyncStatus {
 	remoteAhead = "REMOTE_AHEAD",
 	clientNotFound = "CLIENT_NOT_FOUND",
 	deletedOnServer = "DELETED_ON_SERVER",
+	remoteAheadFolder = "REMOTE_AHEAD_FOLDER",
 }
 export class Sync {
 	provider: Provider;
@@ -106,9 +107,11 @@ export class Sync {
 		let remoteFiles = await this.provider.listFilesContinue({
 			cursor: args.cursor,
 		});
-		console.log("remoteFiles:", remoteFiles);
+		console.log("remoteFiles - LP:", remoteFiles);
 
-		await this.syncFiles({ remoteFiles });
+		await this.syncFiles({ remoteFiles }).catch((e) => {
+			console.error("SyncFiles LP Error", e);
+		});
 		this.cursor = remoteFiles.cursor;
 	}
 
@@ -122,6 +125,7 @@ export class Sync {
 			cursor: string;
 		};
 	}) {
+		console.log("syncFiles:", args);
 		if (!this.fileMap) {
 			throw new Error("Sync Error: fileMap not initialized");
 		}
@@ -150,6 +154,7 @@ export class Sync {
 		clientFileMetadata: FileSyncMetadata | undefined;
 		remoteFileMetadata: RemoteFileData;
 	}) {
+		console.log("syncFile:", args);
 		let syncStatus = this.getSyncStatus({
 			clientFileMetadata: args.clientFileMetadata,
 			remoteFileMetadata: args.remoteFileMetadata,
@@ -182,6 +187,11 @@ export class Sync {
 					remoteFileMetadata: args.remoteFileMetadata,
 				});
 				break;
+			case SyncStatus.remoteAheadFolder:
+				await this.reconcileRemoteAheadFolder({
+					remoteFileMetadata: args.remoteFileMetadata,
+				});
+				break;
 		}
 	}
 
@@ -192,6 +202,10 @@ export class Sync {
 		const { clientFileMetadata, remoteFileMetadata } = args;
 		if (remoteFileMetadata[".tag"] == "deleted") {
 			return SyncStatus.deletedOnServer;
+		}
+
+		if (remoteFileMetadata[".tag"] == "folder") {
+			return SyncStatus.remoteAheadFolder;
 		}
 
 		if (remoteFileMetadata[".tag"] == "file") {
@@ -325,7 +339,44 @@ export class Sync {
 			throw new Error("Sync Error: fileMap not initialized");
 		}
 
-		if (args.clientFileMetadata == undefined) return;
+		/*
+		 * 1. convert remote path to client path
+		 * 2. getClientFolderOrFile
+		 * 3. delete from vault
+		 * 4. If folder:
+		 *	a. Delete from fileMap (Maybe this is not needed - can just error on folder lookup)
+		 *
+		 *
+		 */
+
+		const sanitizedRemotePath = this.sanitizeRemotePath({
+			vaultRoot: this.settings.cloudVaultPath,
+			filePath: args.remoteFileMetadata.path_lower!,
+		});
+		const sanitizedClientPath = this.convertRemoteToClientPath({
+			remotePath: sanitizedRemotePath,
+		});
+
+		let folderOrFile: TAbstractFile | null;
+		if (args.clientFileMetadata) {
+			folderOrFile =
+				this.obsidianApp.vault.getFileByPath(sanitizedClientPath);
+		} else {
+			folderOrFile =
+				this.obsidianApp.vault.getFolderByPath(sanitizedClientPath);
+		}
+
+		console.log("folderOrFile:", folderOrFile);
+		//if (!folderOrFile) return;
+
+		if (!folderOrFile) {
+			console.log("null folderOrFile");
+			return;
+		}
+		await this.obsidianApp.vault.delete(folderOrFile, true);
+		this.fileMap.delete(sanitizedRemotePath);
+		/*
+		if (args.clientFileMetadata) return;
 		const clientFile = this.obsidianApp.vault.getFileByPath(
 			args.clientFileMetadata.path,
 		);
@@ -335,6 +386,7 @@ export class Sync {
 		if (!clientFile) return;
 		this.obsidianApp.vault.delete(clientFile);
 		this.fileMap.delete(args.clientFileMetadata.remotePath);
+		*/
 	}
 
 	reconcileClientAhead(args: { clientFile: TAbstractFile }): Promise<void>;
@@ -414,6 +466,22 @@ export class Sync {
 		args.clientFileMetadata.rev = remoteFileContents.rev;
 		args.clientFileMetadata.fileHash = remoteFileContents.content_hash!;
 		console.log("reconcileRemoteAhead - END:", this.fileMap);
+	}
+
+	reconcileRemoteAheadFolder(args: { remoteFileMetadata: RemoteFileData }) {
+		// TODO: sanitizedRemotePath should handle undefined path_lower
+		console.log("remoteAheadFolder:", args.remoteFileMetadata);
+		const sanitizedRemotePath = this.sanitizeRemotePath({
+			vaultRoot: this.settings.cloudVaultPath,
+			filePath: args.remoteFileMetadata.path_lower!,
+		});
+		console.log("sanitizedRemotePath:", sanitizedRemotePath);
+
+		const sanitizedClientPath = this.convertRemoteToClientPath({
+			remotePath: sanitizedRemotePath,
+		});
+		console.log("sanitizedClientPath:", sanitizedClientPath);
+		return this.obsidianApp.vault.createFolder(sanitizedClientPath);
 	}
 
 	async reconcileClientNotFound(args: {
