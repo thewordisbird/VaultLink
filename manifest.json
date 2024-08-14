@@ -1,11 +1,11 @@
 {
-	"id": "obsidian-dropbox-connect",
-	"name": "Dropbox Connect",
+	"id": "VaultLink",
+	"name": "VaultLink",
 	"version": "1.0.0",
 	"minAppVersion": "0.15.0",
-	"description": "A plugin to sync obsidian with dropbox",
+	"description": "A plugin to link obsidian vault with cloud storage provider",
 	"author": "Justin Bird",
-	"authorUrl": "https://github.com/thewordisbird/obsidian-dropbox-connect",
+	"authorUrl": "https://github.com/thewordisbird/VaultLink",
 	"fundingUrl": "",
 	"isDesktopOnly": false
 }

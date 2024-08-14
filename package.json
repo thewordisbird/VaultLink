@@ -1,7 +1,7 @@
 {
-	"name": "obsidian-dropbox-connect",
+	"name": "VaultLink",
 	"version": "1.0.0",
-	"description": "A plugin to sync obsidian with dropbox",
+	"description": "A plugin to link obsidian vault with cloud storage provider",
 	"main": "main.js",
 	"type": "module",
 	"scripts": {
