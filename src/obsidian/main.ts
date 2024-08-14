@@ -8,7 +8,7 @@ import type { PluginSettings } from "./settings";
 // TODO: Define this type - should not bring dropbox contents into this file
 const LONGPOLL_FREQUENCY = 30000;
 
-export default class ObsidianDropboxConnect extends Plugin {
+export default class VaultLink extends Plugin {
 	settings: PluginSettings;
 
 	async onload() {

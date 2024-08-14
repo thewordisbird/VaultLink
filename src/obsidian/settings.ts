@@ -1,5 +1,5 @@
 import { App, Setting, PluginSettingTab } from "obsidian";
-import ObsidianDropboxConnect from "./main";
+import VaultLink from "./main";
 import { PubSub } from "../../lib/pubsub";
 import { SelectVaultModal } from "./select-vault-modal";
 import { DropboxProvider } from "src/providers/dropbox.provider";
@@ -12,9 +12,9 @@ export interface PluginSettings {
 export const DEFAULT_SETTINGS: Partial<PluginSettings> = {};
 
 export class SettingsTab extends PluginSettingTab {
-	plugin: ObsidianDropboxConnect;
+	plugin: VaultLink;
 
-	constructor(app: App, plugin: ObsidianDropboxConnect) {
+	constructor(app: App, plugin: VaultLink) {
 		super(app, plugin);
 		this.plugin = plugin;
 
@@ -50,7 +50,7 @@ export class SettingsTab extends PluginSettingTab {
 
 		const header = containerEl.createEl("header");
 		const title = header.createEl("h1", {
-			text: "Dropbox Connect (Unofficial)",
+			text: "VaultLink",
 		});
 		title.style.marginBottom = "0";
 		const author = header.createEl("small", {

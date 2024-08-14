@@ -1,15 +1,15 @@
 import { App, Modal } from "obsidian";
 import { Root, createRoot } from "react-dom/client";
-import ObsidianDropboxConnect from "./main";
+import VaultLink from "./main";
 import { PubSub } from "../../lib/pubsub";
 import SelectVault from "../react/select-vault";
 
 export class SelectVaultModal extends Modal {
-	plugin: ObsidianDropboxConnect;
+	plugin: VaultLink;
 	root: Root | null = null;
 	pubsub: PubSub;
 
-	constructor(app: App, plugin: ObsidianDropboxConnect) {
+	constructor(app: App, plugin: VaultLink) {
 		super(app);
 		this.plugin = plugin;
 		this.pubsub = new PubSub();
