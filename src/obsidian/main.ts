@@ -67,6 +67,7 @@ export default class VaultLink extends Plugin {
 		// Automatically authenticate from refresh token
 		if (refreshToken) {
 			dropboxProvider.authorizeWithRefreshToken(refreshToken);
+			pubsub.publish("authorization-success");
 		}
 		/** END PROVIDER AUTHORIZATION **/
 
