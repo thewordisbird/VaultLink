@@ -2,6 +2,7 @@ import type { files, DropboxResponse } from "dropbox";
 import { FileMetadataExtended } from "./dropbox.provider";
 
 export interface Provider {
+	email: string;
 	createFileHash: (args: { fileData: ArrayBuffer }) => string;
 	listFiles(args: { vaultRoot: string }): Promise<{
 		files: (
@@ -30,4 +31,7 @@ export interface Provider {
 	createFile: (args: unknown) => void;
 	batchRenameFolderOrFile: (item: unknown) => void;
 	batchDeleteFolderOrFile: (item: unknown) => void;
+	revokeAuthorizationToken(): Promise<void>;
+	getAuthenticationUrl(): Promise<String>;
+	getCodeVerifier(): string;
 }

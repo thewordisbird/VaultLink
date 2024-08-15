@@ -76,6 +76,10 @@ export class DropboxProvider implements Provider {
 			});
 	}
 
+	get email() {
+		return this.state.account.email;
+	}
+
 	getCodeVerifier(): string {
 		return this.dropboxAuth.getCodeVerifier();
 	}
@@ -203,7 +207,8 @@ export class DropboxProvider implements Provider {
 		const { path } = args;
 		return this.dropbox.filesDownload({ path }).then((res) => res.result);
 	}
-	getUserInfo(): Promise<void> {
+
+	setUserInfo(): Promise<void> {
 		return this.dropbox
 			.usersGetCurrentAccount()
 			.then((response) => {
