@@ -1,4 +1,4 @@
-import { App, Setting, PluginSettingTab } from "obsidian";
+import { App, Setting, PluginSettingTab, Notice } from "obsidian";
 import { PubSub } from "../../lib/pubsub";
 import VaultLink from "./main";
 import { SelectVaultModal } from "./select-vault-modal";
@@ -46,6 +46,13 @@ export class SettingsTab extends PluginSettingTab {
 			this.plugin.settings.providerName = "dropbox" as ProviderName;
 			this.providerName = "dropbox" as ProviderName;
 			this.provider = getProvider({ providerName: this.providerName });
+			this.display();
+		});
+
+		pubsub.subscribe("authorization-failure", () => {
+			new Notice(
+				`Provider Authorization Error: Unable to authorize ${this.provider}`,
+			);
 			this.display();
 		});
 

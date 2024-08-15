@@ -38,12 +38,19 @@ export default class VaultLink extends Plugin {
 			// TODO: Extract function
 			(protocolData) => {
 				// TODO: Handle error if no code is available
-				if (!protocolData.code) throw new Error("");
+				if (!protocolData.code) {
+					pubsub.publish("authorization-failure");
+					return;
+				}
 
 				const codeVerifier =
 					window.sessionStorage.getItem("codeVerifier");
 				// TOOD: Handle error if no code verifier in sessionStorage
-				if (!codeVerifier) throw new Error("");
+				if (!codeVerifier) {
+					pubsub.publish("authorization-failure");
+					return;
+				}
+
 				dropboxProvider.setCodeVerifier(codeVerifier);
 
 				dropboxProvider
@@ -55,8 +62,11 @@ export default class VaultLink extends Plugin {
 							refreshToken,
 						);
 						dropboxProvider.setUserInfo();
+						pubsub.publish("authorization-success");
+					})
+					.catch((_e) => {
+						pubsub.publish("authorization-failure");
 					});
-				pubsub.publish("authorization-success");
 			},
 		);
 
