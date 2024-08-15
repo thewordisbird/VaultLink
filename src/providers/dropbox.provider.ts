@@ -77,7 +77,7 @@ export class DropboxProvider implements Provider {
 	}
 
 	get email() {
-		return this.state.account.email;
+		return this.state.account?.email;
 	}
 
 	getCodeVerifier(): string {

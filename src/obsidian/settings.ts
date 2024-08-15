@@ -139,7 +139,7 @@ export class SettingsTab extends PluginSettingTab {
 				`Provider: ${this.plugin.settings.providerName?.toUpperCase()}`,
 			)
 			.setDesc(
-				`You are connected to ${this.plugin.settings.providerName?.toUpperCase()} with the account ${this.provider?.email.toUpperCase()}`,
+				`You are connected to ${this.plugin.settings.providerName?.toUpperCase()} with the account ${this.provider?.email?.toUpperCase()}`,
 			)
 
 			.addButton((button) => {
