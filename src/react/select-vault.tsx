@@ -1,5 +1,5 @@
 import { StrictMode, useState, useEffect } from "react";
-import { Folder } from "src/types";
+import { Folder, PubsubTopic } from "src/types";
 import { PubSub } from "../../lib/pubsub";
 import { DropboxProvider } from "../providers/dropbox.provider";
 import { useSelectVault } from "./useSelectVault";
@@ -28,7 +28,7 @@ const SelectVault: React.FC<SelectVaultProps> = ({
 				isAddFolderDisplayed={state.isAddFolderDisplayed}
 				handleAddFolder={() => dispatch({ type: "TOGGLE_ADD_FOLDER" })}
 				handleSelectVault={() => {
-					pubsub.publish("set-vault-path", {
+					pubsub.publish(PubsubTopic.SET_VAULT_PATH, {
 						payload: state.path.join("/"),
 					});
 					closeModal();
