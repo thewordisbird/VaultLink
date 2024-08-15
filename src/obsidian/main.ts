@@ -4,6 +4,7 @@ import { DropboxProvider } from ".././providers/dropbox.provider";
 import { PubSub } from "../../lib/pubsub";
 import { Sync } from "src/sync/sync";
 import type { PluginSettings } from "./settings";
+import { PubsubTopic } from "../types";
 
 // TODO: Define this type - should not bring dropbox contents into this file
 const LONGPOLL_FREQUENCY = 30000;
@@ -39,7 +40,7 @@ export default class VaultLink extends Plugin {
 			(protocolData) => {
 				// TODO: Handle error if no code is available
 				if (!protocolData.code) {
-					pubsub.publish("authorization-failure");
+					pubsub.publish(PubsubTopic.AUTHORIZATION_FAILURE);
 					return;
 				}
 
@@ -47,7 +48,7 @@ export default class VaultLink extends Plugin {
 					window.sessionStorage.getItem("codeVerifier");
 				// TOOD: Handle error if no code verifier in sessionStorage
 				if (!codeVerifier) {
-					pubsub.publish("authorization-failure");
+					pubsub.publish(PubsubTopic.AUTHORIZATION_FAILURE);
 					return;
 				}
 
@@ -62,10 +63,10 @@ export default class VaultLink extends Plugin {
 							refreshToken,
 						);
 						dropboxProvider.setUserInfo();
-						pubsub.publish("authorization-success");
+						pubsub.publish(PubsubTopic.AUTHORIZATION_SUCCESS);
 					})
 					.catch((_e) => {
-						pubsub.publish("authorization-failure");
+						pubsub.publish(PubsubTopic.AUTHORIZATION_FAILURE);
 					});
 			},
 		);
@@ -78,7 +79,7 @@ export default class VaultLink extends Plugin {
 		if (refreshToken) {
 			dropboxProvider.authorizeWithRefreshToken(refreshToken);
 			dropboxProvider.setUserInfo();
-			pubsub.publish("authorization-success");
+			pubsub.publish(PubsubTopic.AUTHORIZATION_SUCCESS);
 		}
 		/** END PROVIDER AUTHORIZATION **/
 

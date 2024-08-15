@@ -4,6 +4,7 @@ import VaultLink from "./main";
 import { SelectVaultModal } from "./select-vault-modal";
 import { getProvider, ProviderName } from "../providers/provider";
 import { Provider } from "src/providers/types";
+import { PubsubTopic } from "src/types";
 
 enum Status {
 	"CONNECTED",
@@ -41,7 +42,7 @@ export class SettingsTab extends PluginSettingTab {
 
 		// Register pubsub subscriptions
 		const pubsub = new PubSub();
-		pubsub.subscribe("authorization-success", () => {
+		pubsub.subscribe(PubsubTopic.AUTHORIZATION_SUCCESS, () => {
 			this.status = Status.CONNECTED;
 			this.plugin.settings.providerName = "dropbox" as ProviderName;
 			this.providerName = "dropbox" as ProviderName;
@@ -49,7 +50,7 @@ export class SettingsTab extends PluginSettingTab {
 			this.display();
 		});
 
-		pubsub.subscribe("authorization-failure", () => {
+		pubsub.subscribe(PubsubTopic.AUTHORIZATION_FAILURE, () => {
 			new Notice(
 				`Provider Authorization Error: Unable to authorize ${this.providerName?.toUpperCase()}`,
 				0,
@@ -58,7 +59,7 @@ export class SettingsTab extends PluginSettingTab {
 		});
 
 		pubsub.subscribe(
-			"set-vault-path",
+			PubsubTopic.SET_VAULT_PATH,
 			async (args: { payload: string }) => {
 				const { payload } = args;
 				this.plugin.settings.cloudVaultPath = payload;
