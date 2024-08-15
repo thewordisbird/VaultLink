@@ -9,4 +9,6 @@ export function getProvider(args: { providerName: ProviderName }) {
 	if (args.providerName == ProviderName.DROPBOX) {
 		return new DropboxProvider();
 	}
+
+	return undefined;
 }

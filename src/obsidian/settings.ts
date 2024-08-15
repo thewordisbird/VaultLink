@@ -3,6 +3,7 @@ import { PubSub } from "../../lib/pubsub";
 import VaultLink from "./main";
 import { SelectVaultModal } from "./select-vault-modal";
 import { getProvider, ProviderName } from "../providers/provider";
+import { Provider } from "src/providers/types";
 
 enum Status {
 	"CONNECTED",
@@ -10,19 +11,22 @@ enum Status {
 }
 
 export interface PluginSettings {
-	provider: ProviderName | undefined;
+	providerName: ProviderName | undefined;
 	cloudVaultPath: string | undefined;
 }
 
 export const DEFAULT_SETTINGS: Partial<PluginSettings> = {
-	provider: undefined,
+	providerName: undefined,
 	cloudVaultPath: undefined,
 };
 
 export class SettingsTab extends PluginSettingTab {
 	private plugin: VaultLink;
 	private status: Status;
-	private provider: ProviderName | undefined;
+	private providerName: ProviderName | undefined;
+	// TODO: Can this be typed as the general Provider that all provider
+	// instances will satisfy?
+	private provider: Provider | undefined;
 
 	constructor(app: App, plugin: VaultLink) {
 		super(app, plugin);
@@ -31,15 +35,17 @@ export class SettingsTab extends PluginSettingTab {
 		this.status = Status.DISCONNECTED;
 		// This sets the value to the first item in the list. Must update if changing order.
 		// TODO: Look into more dynamic way to do this.
-		this.provider = this.plugin.settings.provider || ProviderName.DROPBOX;
+		this.providerName =
+			this.plugin.settings.providerName || ProviderName.DROPBOX;
+		this.provider = getProvider({ providerName: this.providerName });
+
 		// Register pubsub subscriptions
 		const pubsub = new PubSub();
 		pubsub.subscribe("authorization-success", () => {
 			this.status = Status.CONNECTED;
-			this.provider = "dropbox" as ProviderName;
-			this.plugin.settings.provider = "dropbox" as ProviderName;
-			console.log("Provider:", this.plugin.settings.provider);
-			console.log("recall display - status:", this.status);
+			this.plugin.settings.providerName = "dropbox" as ProviderName;
+			this.providerName = "dropbox" as ProviderName;
+			this.provider = getProvider({ providerName: this.providerName });
 			this.display();
 		});
 
@@ -61,18 +67,6 @@ export class SettingsTab extends PluginSettingTab {
 		const { containerEl } = this;
 		containerEl.empty();
 
-		// const header = containerEl.createEl("header");
-		//
-		// const title = header.createEl("h1", {
-		// 	text: "VaultLink",
-		// });
-		// title.style.marginBottom = "0";
-		//
-		// header.createEl("small", {
-		// 	text: "Author: Justin Bird",
-		// });
-		//
-
 		const disconnectedEl = containerEl.createEl("div");
 		// TODO: This is duplicated to simplify styling as the first
 		// settings item will not have a top border. When using the
@@ -82,7 +76,7 @@ export class SettingsTab extends PluginSettingTab {
 			.setName("VaultLink")
 			.setDesc("Author: Justin Bird")
 			.addButton((button) => {
-				button.setButtonText("github");
+				button.setButtonText("VaultLink on github");
 				button.onClick(() => {
 					window.location.href =
 						"https://www.github.com/thewordisbird/VaultLink";
@@ -97,35 +91,26 @@ export class SettingsTab extends PluginSettingTab {
 				// This is the first options that is already populated
 				dropdown.setValue(ProviderName.DROPBOX);
 				dropdown.onChange((value) => {
-					this.provider = value as ProviderName;
+					this.providerName = value as ProviderName;
 				});
 			})
 			.addButton((button) => {
 				button.setButtonText("Connect");
 				button.setClass("mod-cta");
-				if (!this.plugin.settings.provider) {
+				if (!this.plugin.settings.providerName) {
 					button.disabled;
 				}
 
 				button.onClick(async () => {
-					// TODO: Extract Function
-					//
-					/* this should instantiate the correct provider
-					 * something like:
-					 * const provider = new Provider(this.provider);
-					 * where the Provider class will return the correct specific provider
-					 */
+					if (!this.providerName) return;
 
-					console.log("provider:", this.provider);
+					this.provider = getProvider({
+						providerName: this.providerName,
+					});
 					if (!this.provider) return;
 
-					const provider = getProvider({
-						providerName: this.provider,
-					});
-					if (!provider) return;
-
-					const authUrl = await provider.getAuthenticationUrl();
-					const codeVerifier = provider.getCodeVerifier();
+					const authUrl = await this.provider.getAuthenticationUrl();
+					const codeVerifier = this.provider.getCodeVerifier();
 
 					window.sessionStorage.clear();
 					window.sessionStorage.setItem("codeVerifier", codeVerifier);
@@ -142,7 +127,7 @@ export class SettingsTab extends PluginSettingTab {
 			.setName("VaultLink")
 			.setDesc("Author: Justin Bird")
 			.addButton((button) => {
-				button.setButtonText("github");
+				button.setButtonText("VaultLink on github");
 				button.onClick(() => {
 					window.location.href =
 						"https://www.github.com/thewordisbird/VaultLink";
@@ -150,9 +135,11 @@ export class SettingsTab extends PluginSettingTab {
 			})
 			.setHeading();
 		new Setting(connectedEl)
-			.setName("Provider")
+			.setName(
+				`Provider: ${this.plugin.settings.providerName?.toUpperCase()}`,
+			)
 			.setDesc(
-				`You are connected to ${this.plugin.settings.provider} with the account`,
+				`You are connected to ${this.plugin.settings.providerName?.toUpperCase()} with the account ${this.provider?.email.toUpperCase()}`,
 			)
 
 			.addButton((button) => {
@@ -161,12 +148,7 @@ export class SettingsTab extends PluginSettingTab {
 				button.onClick(() => {
 					if (!this.provider) return;
 
-					const provider = getProvider({
-						providerName: this.provider,
-					});
-					if (!provider) return;
-
-					provider.revokeAuthorizationToken().then(() => {
+					this.provider.revokeAuthorizationToken().then(() => {
 						localStorage.removeItem("dropboxRefreshToken");
 						this.status = Status.DISCONNECTED;
 						this.display();
@@ -191,7 +173,6 @@ export class SettingsTab extends PluginSettingTab {
 				setting.controlEl.children[0].id = "vault_path_input";
 			});
 
-		console.log("Connection Status:", this.status);
 		if (this.status == Status.CONNECTED) {
 			connectedEl.show();
 			disconnectedEl.hide();
