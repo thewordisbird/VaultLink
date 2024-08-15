@@ -51,7 +51,8 @@ export class SettingsTab extends PluginSettingTab {
 
 		pubsub.subscribe("authorization-failure", () => {
 			new Notice(
-				`Provider Authorization Error: Unable to authorize ${this.provider}`,
+				`Provider Authorization Error: Unable to authorize ${this.providerName?.toUpperCase()}`,
+				0,
 			);
 			this.display();
 		});
