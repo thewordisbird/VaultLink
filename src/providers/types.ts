@@ -36,7 +36,12 @@ export interface Provider {
 	};
 
 	batchCreateFile: {
-		(args: { path: string; contents: ArrayBuffer }): Promise<Promise<void>>;
+		(args: {
+			path: string;
+			contents: ArrayBuffer;
+		}): Promise<
+			Promise<DropboxResponse<files.UploadSessionFinishBatchResult>>
+		>;
 		cancel: () => void;
 	};
 	batchRenameFolderOrFile: {

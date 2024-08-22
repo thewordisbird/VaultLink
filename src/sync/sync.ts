@@ -274,7 +274,7 @@ export class Sync {
 		if (!this.fileMap) {
 			throw new Error("Sync Error: fileMap not initialized");
 		}
-
+		console.log("1. Entry");
 		const sanitizedRemotePath = this.sanitizeRemotePath({
 			vaultRoot: this.settings.cloudVaultPath,
 			filePath: args.folderOrFile.path,
@@ -285,25 +285,34 @@ export class Sync {
 			return;
 		}
 
+		console.log("2. Not Folder");
 		if (args.folderOrFile instanceof TFile) {
-			function callback(res: files.FileMetadata) {
+			console.log("3. Is File");
+			// Get the binary file data
+			const binaryFileContents = await this.obsidianApp.vault.readBinary(
+				args.folderOrFile,
+			);
+
+			console.log("4. Binary Read:", binaryFileContents);
+			const entries = await this.provider.batchCreateFile({
+				path: sanitizedRemotePath,
+				contents: binaryFileContents,
+			});
+
+			console.log("5. Batch Complete:", entries);
+			for (let entry of entries.result.entries) {
+				// TODO: This shouldn't bee needed. improve typing on createFile
+				if (entry[".tag"] == "failure") continue;
+
 				this.fileMap.set(sanitizedRemotePath, {
 					...(args.folderOrFile as TFile),
 					remotePath: sanitizedRemotePath,
-					rev: res.rev,
-					fileHash: res.content_hash!,
+					rev: entry.rev,
+					fileHash: entry.content_hash!,
 				});
 			}
 
-			// Get the binary file data
-			this.obsidianApp.vault
-				.readBinary(args.folderOrFile)
-				.then((contents) => {
-					this.provider.batchCreateFile({
-						path: sanitizedRemotePath,
-						contents,
-					});
-				});
+			console.log("fileMap after create:", this.fileMap);
 		}
 	}
 

@@ -280,11 +280,11 @@ export class DropboxProvider implements Provider {
 	// TODO: Throttle is the wrong name for this. it should be batch or delay
 	batchCreateFile = batch<
 		{ path: string; contents: ArrayBuffer },
-		Promise<void>
+		Promise<DropboxResponse<files.UploadSessionFinishBatchResult>>
 	>(this._createFile.bind(this), BATCH_DELAY_TIME);
 
 	async _createFile(args: { path: string; contents: ArrayBuffer }[]) {
-		console.log("_createFile args:", args);
+		console.log("_createFile start:", args);
 
 		const sessionIds = await this._batchCreateFileStart(args.length);
 		// If an error happens here, we still need to fire Finally to close the batch
@@ -301,6 +301,9 @@ export class DropboxProvider implements Provider {
 		if (rejected.length) {
 			console.log("REJECTED UPDATES:", rejected);
 		}
+
+		console.log("_createFile return:", finishResults);
+		return finishResults;
 	}
 
 	_batchCreateFileStart(numSessions: number) {
