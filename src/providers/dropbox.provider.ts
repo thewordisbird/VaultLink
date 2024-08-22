@@ -1,6 +1,6 @@
 import { Dropbox, DropboxAuth, DropboxResponse, files } from "dropbox";
 import { dropboxContentHasher } from "./dropbox.hasher";
-import { batch, batchProcess } from "src/utils";
+import { batch } from "src/utils";
 import type { Folder } from "../types";
 import { Provider } from "./types";
 import { TFile } from "obsidian";
@@ -290,7 +290,7 @@ export class DropboxProvider implements Provider {
 		return this.dropbox.filesMoveBatchCheckV2({ async_job_id: batchId });
 	}
 
-	batchDeleteFolderOrFile = batchProcess(
+	batchDeleteFolderOrFile = batch<string>(
 		this._batchDeleteFolderOfFile.bind(this),
 		BATCH_DELAY_TIME,
 	);
