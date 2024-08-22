@@ -71,6 +71,27 @@ export default class VaultLink extends Plugin {
 			},
 		);
 
+		pubsub.subscribe(
+			PubsubTopic.SET_VAULT_PATH,
+			async (args: { payload: string }) => {
+				const { payload } = args;
+
+				if (this.settings.cloudVaultPath == payload) {
+					console.log("No Change to vault path - returning");
+					return;
+				}
+
+				this.settings.cloudVaultPath = payload;
+				await this.saveSettings();
+
+				const clientFoldersOrFiles = this.app.vault.getAllLoadedFiles();
+
+				await fileSync.initializeFileMap({ clientFoldersOrFiles });
+				await fileSync.syncRemoteFiles();
+				await fileSync.syncClientFiles();
+			},
+		);
+
 		// TODO: Create new localStorage property: "provider" in addition to
 		//	property: "providerRefreshToken" for eventual scaling
 		const refreshToken = localStorage.getItem("dropboxRefreshToken");
@@ -120,7 +141,11 @@ export default class VaultLink extends Plugin {
 			this.registerEvent(
 				this.app.vault.on("create", (folderOrFile) => {
 					console.log("create:", folderOrFile);
-					fileSync.reconcileCreateFileOnClient({ folderOrFile });
+					fileSync
+						.reconcileCreateFileOnClient({ folderOrFile })
+						.catch((e) => {
+							console.error("Create Event Error:", e);
+						});
 				}),
 			);
 		});
@@ -129,14 +154,22 @@ export default class VaultLink extends Plugin {
 			// TODO: Extract function
 			this.app.vault.on("modify", (folderOrFile) => {
 				console.log("modify:", folderOrFile);
-				fileSync.reconcileClientAhead({ clientFile: folderOrFile });
+				fileSync
+					.reconcileClientAhead({ clientFile: folderOrFile })
+					.catch((e) => {
+						console.error("Modify Event Error:", e);
+					});
 			}),
 		);
 
 		this.registerEvent(
 			this.app.vault.on("rename", (folderOrFile, ctx) => {
 				console.log("rename:", folderOrFile, ctx);
-				fileSync.reconcileMoveFileOnClient({ folderOrFile, ctx });
+				fileSync
+					.reconcileMoveFileOnClient({ folderOrFile, ctx })
+					.catch((e) => {
+						console.error("Rename Event Error:", e);
+					});
 			}),
 		);
 

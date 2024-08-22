@@ -1,6 +1,6 @@
 import { Dropbox, DropboxAuth, DropboxResponse, files } from "dropbox";
 import { dropboxContentHasher } from "./dropbox.hasher";
-import { batchProcess, throttleProcess } from "src/utils";
+import { batch } from "src/utils";
 import type { Folder } from "../types";
 import { Provider } from "./types";
 
@@ -18,8 +18,7 @@ type DropboxState = {
 export interface FileMetadataExtended extends files.FileMetadata {
 	fileBlob?: Blob;
 }
-const BATCH_DELAY_TIME = 1000;
-const THROTTLE_DELAY_TIME = 500;
+const BATCH_DELAY_TIME = 500;
 
 export const REDIRECT_URI = "obsidian://connect-dropbox";
 export const CLIENT_ID = "vofawt4jgywrgey";
@@ -223,19 +222,19 @@ export class DropboxProvider implements Provider {
 	}
 
 	/* File and Folder Controls */
-	batchCreateFolder = batchProcess(
+	batchCreateFolder = batch<string, void>(
 		this._batchCreateFolder.bind(this),
 		BATCH_DELAY_TIME,
 	);
 
 	private _batchCreateFolder(paths: string[]) {
 		console.log("_batchDeleteFolderOrFile:", paths);
-		this.dropbox
+		return this.dropbox
 			.filesCreateFolderBatch({ paths })
 			.then((res) => {
-				// This returns a job id that needs to be checked to confirm
-				// if the process was successful. this will require a quing process
-				// for the plugin to continue to check if there are sync issues
+				// This returns the results of the entry with a .tag property
+				// to say if the creation was successful or not.
+				// TODO: failed itmes should be dealt with
 				console.log("filesCreateFolderBatch Res:", res);
 			})
 			.catch((e: any) => {
@@ -243,53 +242,26 @@ export class DropboxProvider implements Provider {
 			});
 	}
 
-	batchRenameFolderOrFile = batchProcess(
-		this._batchRenameFolderOrFile.bind(this),
-		BATCH_DELAY_TIME,
-	);
+	batchRenameFolderOrFile = batch<
+		{ from_path: string; to_path: string },
+		Promise<void>
+	>(this._batchRenameFolderOrFile.bind(this), BATCH_DELAY_TIME);
 
 	private _batchRenameFolderOrFile(
 		args: { from_path: string; to_path: string }[],
 	) {
 		console.log("_batchRenameFolderOrFile:", args);
-		this.dropbox
+		return this.dropbox
 			.filesMoveBatchV2({ entries: args })
 			.then((res) => {
-				// This returns a job id that needs to be checked to confirm
-				// if the process was successful. this will require a quing process
-				// for the plugin to continue to check if there are sync issues
 				console.log("filesCreateFolderBatch Res:", res);
-				// @ts-ignore
-				this.watchForBatchToComplete(res.result.async_job_id);
 			})
 			.catch((e: any) => {
 				console.error("Dropbox filesCreateFolderBatch Error:", e);
 			});
 	}
 
-	async watchForBatchToComplete(
-		batchId: string,
-		//callback: (args: files.RelocationBatchResultEntry) => void
-	) {
-		let intervalId = setInterval(() => {
-			console.log("Ping...");
-			this._watchForBatchToComplete(batchId).then((res) => {
-				if (res.result[".tag"] == "complete") {
-					clearInterval(intervalId);
-					// iterate over entries to make sure everything was successful
-					// for (let entry of res.result.entries){
-					// 	callback(entry);
-					// }
-				}
-			});
-		}, 2000);
-	}
-
-	private _watchForBatchToComplete(batchId: string) {
-		return this.dropbox.filesMoveBatchCheckV2({ async_job_id: batchId });
-	}
-
-	batchDeleteFolderOrFile = batchProcess(
+	batchDeleteFolderOrFile = batch<string, Promise<void>>(
 		this._batchDeleteFolderOfFile.bind(this),
 		BATCH_DELAY_TIME,
 	);
@@ -299,81 +271,133 @@ export class DropboxProvider implements Provider {
 		this.dropbox
 			.filesDeleteBatch({ entries: paths.map((path) => ({ path })) })
 			.then((res) => {
-				// This returns a job id that needs to be checked to confirm
-				// if the process was successful. this will require a quing process
-				// for the plugin to continue to check if there are sync issues
 				console.log("filesDeleteBatch Res:", res);
 			})
 			.catch((e: any) => {
 				console.error("Dropbox filesDeleteBatch Error:", e);
 			});
 	}
-	createFile = throttleProcess(
-		this._createFile.bind(this),
-		THROTTLE_DELAY_TIME,
-	);
+	// TODO: Throttle is the wrong name for this. it should be batch or delay
+	batchCreateFile = batch<
+		{ path: string; contents: ArrayBuffer },
+		Promise<void>
+	>(this._createFile.bind(this), BATCH_DELAY_TIME);
 
-	private _createFile({
-		path,
-		contents,
-		callback,
-	}: {
-		path: string;
-		contents: string;
-		callback: (args: files.FileMetadata) => void;
+	async _createFile(args: { path: string; contents: ArrayBuffer }[]) {
+		console.log("_createFile args:", args);
+
+		const sessionIds = await this._batchCreateFileStart(args.length);
+		// If an error happens here, we still need to fire Finally to close the batch
+		const { fulfilled, rejected } = await this._batchCreateFileAppend({
+			files: args,
+			sessionIds,
+		});
+
+		// TODO: Should this be returned to the caller??
+		const finishResults = await this._batchCreateFileFinish(fulfilled);
+		console.log("finishResults:", finishResults);
+
+		// TODO: Handle rejected
+		if (rejected.length) {
+			console.log("REJECTED UPDATES:", rejected);
+		}
+	}
+
+	_batchCreateFileStart(numSessions: number) {
+		return this.dropbox
+			.filesUploadSessionStartBatch({
+				num_sessions: numSessions,
+			})
+			.then((res) => res.result.session_ids);
+	}
+
+	_batchCreateFileAppend(args: {
+		files: { path: string; contents: ArrayBuffer }[];
+		sessionIds: string[];
 	}) {
-		return this.dropbox
-			.filesUpload({
-				path: path,
-				contents: contents,
-			})
-			.then((res) => callback(res.result))
-			.catch((e: any) => {
-				console.error("Dropbox filesUpload Error:", e);
-			});
+		const { files, sessionIds } = args;
+		const entries = [];
+		for (let i = 0; i < files.length; i++) {
+			console.log("bytesize:", files[i].contents.byteLength);
+
+			// NOTE: This assumes all files will be less than 150Mb
+			// An improvement can be made to split the file into 150Mb
+			// parts upto a max size of 350GB.
+			// This doesn't seem neccessary at this point for a note syncing
+			// app
+			let startCursor = {
+				offset: 0,
+				session_id: sessionIds[i],
+			};
+
+			let endCursor = {
+				offset: files[i].contents.byteLength,
+				session_id: sessionIds[i],
+			};
+			entries.push(
+				new Promise<{
+					path: string;
+					cursor: { offset: number; session_id: string };
+					response: DropboxResponse<void>;
+				}>((res, rej) => {
+					this.dropbox
+						.filesUploadSessionAppendV2({
+							contents: files[i].contents,
+							cursor: startCursor,
+							close: true,
+						})
+						.then((response) => {
+							res({
+								cursor: endCursor,
+								path: files[i].path,
+								response,
+							});
+						})
+						.catch((e) => {
+							rej(e);
+						});
+				}),
+			);
+		}
+
+		return Promise.allSettled(entries).then((settledEntreis) => {
+			const fulfilled = settledEntreis.filter(
+				(entry) => entry.status == "fulfilled",
+			) as PromiseFulfilledResult<{
+				path: string;
+				cursor: { offset: number; session_id: string };
+				response: DropboxResponse<void>;
+			}>[];
+
+			const rejected = settledEntreis.filter(
+				(entry) => entry.status == "rejected",
+			) as PromiseRejectedResult[];
+
+			return {
+				fulfilled,
+				rejected,
+			};
+		});
+	}
+	async _batchCreateFileFinish(
+		entries: PromiseFulfilledResult<{
+			path: string;
+			cursor: { offset: number; session_id: string };
+			response: DropboxResponse<void>;
+		}>[],
+	) {
+		return this.dropbox.filesUploadSessionFinishBatchV2({
+			entries: entries.map((entry) => {
+				return {
+					commit: {
+						path: entry.value.path,
+					},
+					cursor: entry.value.cursor,
+				};
+			}),
+		});
 	}
 
-	/*
-	modifyFile({
-		path,
-		contents,
-		rev,
-	}: {
-		path: string;
-		contents: ArrayBuffer;
-		rev: string;
-	}) {
-		console.log("modifyFile:", path, contents, rev);
-		return this.dropbox
-			.filesUpload({
-				mode: {
-					".tag": "update",
-					update: rev,
-				},
-				path: path,
-				contents: new Blob([contents]),
-			})
-			.catch((e: any) => {
-				console.error("Dropbox filesUpload Error:", e);
-			});
-	}
-
-	// TODO: rename to updateFile
-	overwriteFile(args: { path: string; contents: ArrayBuffer }) {
-		console.log("overwriteFile:", args.path, args.contents);
-		return this.dropbox
-			.filesUpload({
-				mode: {
-					".tag": "overwrite",
-				},
-				path: args.path,
-				contents: new Blob([args.contents]),
-			})
-			.catch((e: any) => {
-				console.error("Dropbox filesUpload Error:", e);
-			});
-	}
-	*/
 	updateFile(args: { path: string; rev: string; contents: ArrayBuffer }) {
 		return this.dropbox
 			.filesUpload({

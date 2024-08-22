@@ -62,8 +62,7 @@ export class SettingsTab extends PluginSettingTab {
 			PubsubTopic.SET_VAULT_PATH,
 			async (args: { payload: string }) => {
 				const { payload } = args;
-				this.plugin.settings.cloudVaultPath = payload;
-				await this.plugin.saveSettings();
+
 				const vaultPathInput = document.getElementById(
 					"vault_path_input",
 				) as HTMLInputElement;

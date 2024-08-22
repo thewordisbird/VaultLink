@@ -50,7 +50,8 @@ export class Sync {
 	async initializeFileMap(args: {
 		clientFoldersOrFiles: TAbstractFile[];
 	}): Promise<void> {
-		if (this.fileMap) return;
+		console.log("start - initializedFileMap:", args);
+		//if (this.fileMap) return;
 		this.fileMap = new Map();
 
 		for (let clientFolderOrFile of args.clientFoldersOrFiles) {
@@ -74,8 +75,45 @@ export class Sync {
 				rev: undefined,
 			});
 		}
+
+		console.log("end - initializedFileMap:", this.fileMap);
 	}
 
+	async syncClientFiles(): Promise<void> {
+		// Any File that does NOT have a rev will be uploaded to the provider
+		// Run this after syncRemote
+		console.log("start - syncClientFiles:");
+		if (!this.fileMap) {
+			throw new Error("Sync Error: fileMap not initialized");
+		}
+
+		for (const [remotePath, fileData] of this.fileMap) {
+			if (fileData.rev) continue;
+
+			const file = this.obsidianApp.vault.getFileByPath(fileData.path);
+			if (!file) return;
+
+			const sanitizedRemotePath = this.sanitizeRemotePath({
+				vaultRoot: this.settings.cloudVaultPath,
+				filePath: file.path,
+			});
+
+			this.obsidianApp.vault
+				.readBinary(file)
+				.then((contents) => {
+					this.provider.batchCreateFile({
+						path: sanitizedRemotePath,
+						contents,
+					});
+				})
+				// TODO: Error handling
+				.catch((e) => {
+					console.error(e);
+				});
+		}
+
+		console.log("end - syncClientFiles:");
+	}
 	async syncRemoteFiles(): Promise<void> {
 		if (!this.fileMap) {
 			throw new Error("Sync Error: fileMap not initialized");
@@ -98,7 +136,6 @@ export class Sync {
 	}
 
 	async syncRemoteFilesLongPoll(args: { cursor: string }): Promise<void> {
-		console.log("syncRemoteFilesLongPoll:", args);
 		if (!this.fileMap) {
 			throw new Error("Sync Error: fileMap not initialized");
 		}
@@ -107,7 +144,6 @@ export class Sync {
 		let remoteFiles = await this.provider.listFilesContinue({
 			cursor: args.cursor,
 		});
-		console.log("remoteFiles - LP:", remoteFiles);
 
 		await this.syncFiles({ remoteFiles }).catch((e) => {
 			console.error("SyncFiles LP Error", e);
@@ -125,7 +161,6 @@ export class Sync {
 			cursor: string;
 		};
 	}) {
-		console.log("syncFiles:", args);
 		if (!this.fileMap) {
 			throw new Error("Sync Error: fileMap not initialized");
 		}
@@ -154,7 +189,6 @@ export class Sync {
 		clientFileMetadata: FileSyncMetadata | undefined;
 		remoteFileMetadata: RemoteFileData;
 	}) {
-		console.log("syncFile:", args);
 		let syncStatus = this.getSyncStatus({
 			clientFileMetadata: args.clientFileMetadata,
 			remoteFileMetadata: args.remoteFileMetadata,
@@ -255,23 +289,21 @@ export class Sync {
 			function callback(res: files.FileMetadata) {
 				this.fileMap.set(sanitizedRemotePath, {
 					...(args.folderOrFile as TFile),
-					clientPath: args.folderOrFile.path,
 					remotePath: sanitizedRemotePath,
 					rev: res.rev,
 					fileHash: res.content_hash!,
 				});
-				console.log("createFile fileMap:", this.fileMap);
 			}
 
+			// Get the binary file data
 			this.obsidianApp.vault
 				.readBinary(args.folderOrFile)
-				.then((contents) =>
-					this.provider.createFile({
+				.then((contents) => {
+					this.provider.batchCreateFile({
 						path: sanitizedRemotePath,
 						contents,
-						callback: callback.bind(this),
-					}),
-				);
+					});
+				});
 		}
 	}
 
@@ -279,7 +311,6 @@ export class Sync {
 		folderOrFile: TAbstractFile;
 		ctx: string;
 	}) {
-		console.log("reconcileMoveFileOnCliend:", args);
 		if (!this.fileMap) {
 			throw new Error("Sync Error: fileMap not initialized");
 		}
@@ -309,10 +340,6 @@ export class Sync {
 			//clientPath: this.convertRemoteToClientPath({ remotePath: toPath }),
 			remotePath: toPath,
 		});
-
-		console.log("fileMap - rename:", this.fileMap);
-		console.log("syncData:", syncData);
-		console.log("args.folderOrFile:", args.folderOrFile);
 	}
 
 	reconcileDeletedOnClient(args: { folderOrFile: TAbstractFile }) {
@@ -334,7 +361,6 @@ export class Sync {
 		clientFileMetadata: FileSyncMetadata | undefined;
 		remoteFileMetadata: RemoteFileData;
 	}) {
-		console.log("reconcileDeletedOnServer:", args);
 		if (!this.fileMap) {
 			throw new Error("Sync Error: fileMap not initialized");
 		}
@@ -370,12 +396,6 @@ export class Sync {
 		clientFile?: TAbstractFile;
 		clientFileMetadata?: FileSyncMetadata;
 	}): Promise<void> {
-		console.log(
-			"reconcileClientAhead\nClientFile:",
-			args.clientFile,
-			"\nClientFileMetadata:",
-			args.clientFileMetadata,
-		);
 		if (!this.fileMap) {
 			throw new Error("Sync Error: fileMap not initialized");
 		}
@@ -387,17 +407,13 @@ export class Sync {
 				vaultRoot: this.settings.cloudVaultPath!,
 				filePath: args.clientFile.path,
 			});
-			console.log("sanitizedRemotePath:", sanitizedRemotePath);
-			console.log("fileMap:", this.fileMap);
 			clientFileMetadata = this.fileMap.get(sanitizedRemotePath);
-			console.log("clientFileMetadata:", clientFileMetadata);
 		}
 		if (clientFileMetadata == undefined) return;
 		let clientFile = this.obsidianApp.vault.getFileByPath(
 			clientFileMetadata.path,
 		);
 
-		console.log("GET - clientFile:", clientFile);
 		let clientFileContents = await this.obsidianApp.vault.readBinary(
 			clientFile!,
 		);
@@ -414,14 +430,11 @@ export class Sync {
 	}
 
 	async reconcileRemoteAhead(args: { clientFileMetadata: FileSyncMetadata }) {
-		console.log("reconcileRemoteAhead - START:", args);
-
 		if (args.clientFileMetadata == undefined) return;
 
 		const clientFile = this.obsidianApp.vault.getFileByPath(
 			args.clientFileMetadata.path,
 		);
-		console.log("GET - clientFile:", clientFile);
 
 		const remoteFileContents = await this.provider.downloadFile({
 			path: args.clientFileMetadata.remotePath,
@@ -438,30 +451,24 @@ export class Sync {
 
 		args.clientFileMetadata.rev = remoteFileContents.rev;
 		args.clientFileMetadata.fileHash = remoteFileContents.content_hash!;
-		console.log("reconcileRemoteAhead - END:", this.fileMap);
 	}
 
 	reconcileRemoteAheadFolder(args: { remoteFileMetadata: RemoteFileData }) {
 		// TODO: sanitizedRemotePath should handle undefined path_lower
-		console.log("remoteAheadFolder:", args.remoteFileMetadata);
 		const sanitizedRemotePath = this.sanitizeRemotePath({
 			vaultRoot: this.settings.cloudVaultPath,
 			filePath: args.remoteFileMetadata.path_lower!,
 		});
-		console.log("sanitizedRemotePath:", sanitizedRemotePath);
 
 		const sanitizedClientPath = this.convertRemoteToClientPath({
 			remotePath: sanitizedRemotePath,
 		});
-		console.log("sanitizedClientPath:", sanitizedClientPath);
 		return this.obsidianApp.vault.createFolder(sanitizedClientPath);
 	}
 
 	async reconcileClientNotFound(args: {
 		remoteFileMetadata: RemoteFileData;
 	}) {
-		console.log("reconcileClientNotFound - START:", args);
-
 		if (!this.fileMap) {
 			throw new Error("Sync Error: fileMap not initialized");
 		}
@@ -469,8 +476,6 @@ export class Sync {
 		const remoteFileContents = await this.provider.downloadFile({
 			path: args.remoteFileMetadata.path_lower!,
 		});
-
-		console.log("remoteFileContents:", remoteFileContents);
 
 		const sanitizedRemotePath = this.sanitizeRemotePath({
 			vaultRoot: this.settings.cloudVaultPath,
@@ -482,7 +487,6 @@ export class Sync {
 		});
 
 		try {
-			console.log("sanitizedClientPath:", sanitizedClientPath);
 			const clientFileMetadata =
 				await this.obsidianApp.vault.createBinary(
 					sanitizedClientPath,
@@ -502,8 +506,6 @@ export class Sync {
 		} catch (e) {
 			console.error("WHOOPS!", e);
 		}
-
-		console.log("reconcileClientNotFound - END:", this.fileMap);
 	}
 
 	sanitizeRemotePath(args: {
@@ -535,7 +537,6 @@ export class Sync {
 	}
 
 	public set cursor(cursor: string | null) {
-		console.log("setting cursor:", cursor);
 		this._cursor = cursor;
 		if (cursor) {
 			window.localStorage.setItem("cursor", cursor);
@@ -546,12 +547,10 @@ export class Sync {
 
 	public get cursor() {
 		if (this._cursor) {
-			console.log("getting cursor:", this._cursor);
 			return this._cursor;
 		}
 
 		this._cursor = window.localStorage.getItem("cursor");
-		console.log("getting cursor:", this._cursor);
 		return this._cursor;
 	}
 }
