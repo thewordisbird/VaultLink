@@ -244,7 +244,7 @@ export class DropboxProvider implements Provider {
 			});
 	}
 
-	batchRenameFolderOrFile = batchProcess(
+	batchRenameFolderOrFile = batch<{ from_path: string; to_path: string }>(
 		this._batchRenameFolderOrFile.bind(this),
 		BATCH_DELAY_TIME,
 	);
