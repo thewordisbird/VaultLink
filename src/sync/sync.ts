@@ -97,12 +97,10 @@ export class Sync {
 				vaultRoot: this.settings.cloudVaultPath,
 				filePath: file.path,
 			});
-			//const binaryFile = await this.obsidianApp.vault.readBinary(file);
 
 			this.obsidianApp.vault
 				.readBinary(file)
 				.then((contents) => {
-					// Pass to batchCreateFile
 					this.provider.batchCreateFile({
 						path: sanitizedRemotePath,
 						contents,
@@ -112,19 +110,6 @@ export class Sync {
 				.catch((e) => {
 					console.error(e);
 				});
-
-			// this.provider.createFile({
-			// 	path: remotePath,
-			// 	contents: binaryFile,
-			// 	callback: (res: files.FileMetadata) => {
-			// 		this.fileMap!.set(remotePath, {
-			// 			...fileData,
-			// 			remotePath,
-			// 			rev: res.rev,
-			// 			fileHash: res.content_hash!,
-			// 		});
-			// 	},
-			// });
 		}
 
 		console.log("end - syncClientFiles:");
@@ -314,7 +299,6 @@ export class Sync {
 			this.obsidianApp.vault
 				.readBinary(args.folderOrFile)
 				.then((contents) => {
-					// Pass to batchCreateFile
 					this.provider.batchCreateFile({
 						path: sanitizedRemotePath,
 						contents,

@@ -224,19 +224,19 @@ export class DropboxProvider implements Provider {
 	}
 
 	/* File and Folder Controls */
-	batchCreateFolder = batch<string>(
+	batchCreateFolder = batch<string, void>(
 		this._batchCreateFolder.bind(this),
 		BATCH_DELAY_TIME,
 	);
 
 	private _batchCreateFolder(paths: string[]) {
 		console.log("_batchDeleteFolderOrFile:", paths);
-		this.dropbox
+		return this.dropbox
 			.filesCreateFolderBatch({ paths })
 			.then((res) => {
-				// This returns a job id that needs to be checked to confirm
-				// if the process was successful. this will require a quing process
-				// for the plugin to continue to check if there are sync issues
+				// This returns the results of the entry with a .tag property
+				// to say if the creation was successful or not.
+				// TODO: failed itmes should be dealt with
 				console.log("filesCreateFolderBatch Res:", res);
 			})
 			.catch((e: any) => {
@@ -244,53 +244,26 @@ export class DropboxProvider implements Provider {
 			});
 	}
 
-	batchRenameFolderOrFile = batch<{ from_path: string; to_path: string }>(
-		this._batchRenameFolderOrFile.bind(this),
-		BATCH_DELAY_TIME,
-	);
+	batchRenameFolderOrFile = batch<
+		{ from_path: string; to_path: string },
+		Promise<void>
+	>(this._batchRenameFolderOrFile.bind(this), BATCH_DELAY_TIME);
 
 	private _batchRenameFolderOrFile(
 		args: { from_path: string; to_path: string }[],
 	) {
 		console.log("_batchRenameFolderOrFile:", args);
-		this.dropbox
+		return this.dropbox
 			.filesMoveBatchV2({ entries: args })
 			.then((res) => {
-				// This returns a job id that needs to be checked to confirm
-				// if the process was successful. this will require a quing process
-				// for the plugin to continue to check if there are sync issues
 				console.log("filesCreateFolderBatch Res:", res);
-				// @ts-ignore
-				this.watchForBatchToComplete(res.result.async_job_id);
 			})
 			.catch((e: any) => {
 				console.error("Dropbox filesCreateFolderBatch Error:", e);
 			});
 	}
 
-	async watchForBatchToComplete(
-		batchId: string,
-		//callback: (args: files.RelocationBatchResultEntry) => void
-	) {
-		let intervalId = setInterval(() => {
-			console.log("Ping...");
-			this._watchForBatchToComplete(batchId).then((res) => {
-				if (res.result[".tag"] == "complete") {
-					clearInterval(intervalId);
-					// iterate over entries to make sure everything was successful
-					// for (let entry of res.result.entries){
-					// 	callback(entry);
-					// }
-				}
-			});
-		}, 2000);
-	}
-
-	private _watchForBatchToComplete(batchId: string) {
-		return this.dropbox.filesMoveBatchCheckV2({ async_job_id: batchId });
-	}
-
-	batchDeleteFolderOrFile = batch<string>(
+	batchDeleteFolderOrFile = batch<string, Promise<void>>(
 		this._batchDeleteFolderOfFile.bind(this),
 		BATCH_DELAY_TIME,
 	);
@@ -300,9 +273,6 @@ export class DropboxProvider implements Provider {
 		this.dropbox
 			.filesDeleteBatch({ entries: paths.map((path) => ({ path })) })
 			.then((res) => {
-				// This returns a job id that needs to be checked to confirm
-				// if the process was successful. this will require a quing process
-				// for the plugin to continue to check if there are sync issues
 				console.log("filesDeleteBatch Res:", res);
 			})
 			.catch((e: any) => {
@@ -310,10 +280,11 @@ export class DropboxProvider implements Provider {
 			});
 	}
 	// TODO: Throttle is the wrong name for this. it should be batch or delay
-	batchCreateFile = batch<{ path: string; contents: ArrayBuffer }>(
-		this._createFile.bind(this),
-		500,
-	);
+	batchCreateFile = batch<
+		{ path: string; contents: ArrayBuffer },
+		Promise<void>
+	>(this._createFile.bind(this), 500);
+
 	async _createFile(args: { path: string; contents: ArrayBuffer }[]) {
 		console.log("_createFile args:", args);
 
@@ -324,7 +295,9 @@ export class DropboxProvider implements Provider {
 			sessionIds,
 		});
 
-		await this._batchCreateFileFinish(fulfilled);
+		// TODO: Should this be returned to the caller??
+		const finishResults = await this._batchCreateFileFinish(fulfilled);
+		console.log("finishResults:", finishResults);
 
 		// TODO: Handle rejected
 		if (rejected.length) {

@@ -27,15 +27,24 @@ export interface Provider {
 		contents: ArrayBuffer;
 	}): Promise<void | DropboxResponse<files.FileMetadata>>;
 	downloadFile(args: { path: string }): Promise<FileMetadataExtended>;
-	batchCreateFolder(item: unknown): void;
-	createFile: (args: unknown) => void;
-	batchRenameFolderOrFile: (item: unknown) => void;
-	batchDeleteFolderOrFile: (item: unknown) => void;
 	revokeAuthorizationToken(): Promise<void>;
 	getAuthenticationUrl(): Promise<String>;
 	getCodeVerifier(): string;
+	batchCreateFolder: {
+		(args: string): Promise<void>;
+		cancel: () => void;
+	};
+
 	batchCreateFile: {
-		(args: { path: string; contents: ArrayBuffer }): void;
+		(args: { path: string; contents: ArrayBuffer }): Promise<Promise<void>>;
+		cancel: () => void;
+	};
+	batchRenameFolderOrFile: {
+		(args: { from_path: string; to_path: string }): Promise<Promise<void>>;
+		cancel: () => void;
+	};
+	batchDeleteFolderOrFile: {
+		(args: string): Promise<Promise<void>>;
 		cancel: () => void;
 	};
 }

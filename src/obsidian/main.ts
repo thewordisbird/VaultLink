@@ -154,7 +154,11 @@ export default class VaultLink extends Plugin {
 			// TODO: Extract function
 			this.app.vault.on("modify", (folderOrFile) => {
 				console.log("modify:", folderOrFile);
-				fileSync.reconcileClientAhead({ clientFile: folderOrFile });
+				fileSync
+					.reconcileClientAhead({ clientFile: folderOrFile })
+					.catch((e) => {
+						console.error("Modify Event Error:", e);
+					});
 			}),
 		);
 
