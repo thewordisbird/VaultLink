@@ -3,7 +3,6 @@ import { dropboxContentHasher } from "./dropbox.hasher";
 import { batch } from "src/utils";
 import type { Folder } from "../types";
 import { Provider } from "./types";
-import { TFile } from "obsidian";
 
 // TODO: All listfolder, listFiles, listFilesContinue need to consider has_more
 
@@ -19,8 +18,7 @@ type DropboxState = {
 export interface FileMetadataExtended extends files.FileMetadata {
 	fileBlob?: Blob;
 }
-const BATCH_DELAY_TIME = 1000;
-const THROTTLE_DELAY_TIME = 100;
+const BATCH_DELAY_TIME = 500;
 
 export const REDIRECT_URI = "obsidian://connect-dropbox";
 export const CLIENT_ID = "vofawt4jgywrgey";
@@ -283,7 +281,7 @@ export class DropboxProvider implements Provider {
 	batchCreateFile = batch<
 		{ path: string; contents: ArrayBuffer },
 		Promise<void>
-	>(this._createFile.bind(this), 500);
+	>(this._createFile.bind(this), BATCH_DELAY_TIME);
 
 	async _createFile(args: { path: string; contents: ArrayBuffer }[]) {
 		console.log("_createFile args:", args);
@@ -400,47 +398,6 @@ export class DropboxProvider implements Provider {
 		});
 	}
 
-	/*
-	modifyFile({
-		path,
-		contents,
-		rev,
-	}: {
-		path: string;
-		contents: ArrayBuffer;
-		rev: string;
-	}) {
-		console.log("modifyFile:", path, contents, rev);
-		return this.dropbox
-			.filesUpload({
-				mode: {
-					".tag": "update",
-					update: rev,
-				},
-				path: path,
-				contents: new Blob([contents]),
-			})
-			.catch((e: any) => {
-				console.error("Dropbox filesUpload Error:", e);
-			});
-	}
-
-	// TODO: rename to updateFile
-	overwriteFile(args: { path: string; contents: ArrayBuffer }) {
-		console.log("overwriteFile:", args.path, args.contents);
-		return this.dropbox
-			.filesUpload({
-				mode: {
-					".tag": "overwrite",
-				},
-				path: args.path,
-				contents: new Blob([args.contents]),
-			})
-			.catch((e: any) => {
-				console.error("Dropbox filesUpload Error:", e);
-			});
-	}
-	*/
 	updateFile(args: { path: string; rev: string; contents: ArrayBuffer }) {
 		return this.dropbox
 			.filesUpload({
