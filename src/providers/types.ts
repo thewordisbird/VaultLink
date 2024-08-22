@@ -34,4 +34,8 @@ export interface Provider {
 	revokeAuthorizationToken(): Promise<void>;
 	getAuthenticationUrl(): Promise<String>;
 	getCodeVerifier(): string;
+	batchCreateFile: {
+		(args: { path: string; contents: ArrayBuffer }): void;
+		cancel: () => void;
+	};
 }

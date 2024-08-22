@@ -36,13 +36,13 @@ export function throttleProcess(
 	let intervalId: NodeJS.Timer | null = null;
 
 	const flushQueue = () => {
-		intervalId = setInterval(() => {
+		intervalId = setInterval(async () => {
 			if (queue.length == 0) {
 				clearInterval(intervalId!);
 				intervalId = null;
 			} else {
 				const cbArgs = queue.shift();
-				callback.call(null, cbArgs);
+				await callback.call(null, cbArgs);
 			}
 		}, throttleTime);
 	};
@@ -55,4 +55,39 @@ export function throttleProcess(
 
 	// Return an object with the addToQueue function
 	return addToQueue;
+}
+
+export function batch<I>(
+	func: (args: I[]) => void | Promise<void>,
+	wait: number,
+	options?: {},
+) {
+	let items: I[] = [];
+	let timeoutId: string | number | NodeJS.Timeout | undefined;
+
+	function batched(args: I) {
+		if (timeoutId) clearTimeout(timeoutId);
+		items.push(args);
+		timeoutId = setTimeout(async () => {
+			try {
+				await func(items);
+				items = [];
+				clearTimeout(timeoutId);
+				timeoutId = undefined;
+			} catch (e) {
+				console.error("Error processing batch:", e);
+				items = [];
+				clearTimeout(timeoutId);
+				timeoutId = undefined;
+			}
+		}, wait);
+	}
+
+	function cancel() {
+		items = [];
+		clearTimeout(timeoutId);
+		timeoutId = undefined;
+	}
+	batched.cancel = cancel;
+	return batched;
 }

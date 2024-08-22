@@ -1,8 +1,9 @@
 import { Dropbox, DropboxAuth, DropboxResponse, files } from "dropbox";
 import { dropboxContentHasher } from "./dropbox.hasher";
-import { batchProcess, throttleProcess } from "src/utils";
+import { batch, batchProcess, throttleProcess } from "src/utils";
 import type { Folder } from "../types";
 import { Provider } from "./types";
+import { TFile } from "obsidian";
 
 // TODO: All listfolder, listFiles, listFilesContinue need to consider has_more
 
@@ -19,7 +20,7 @@ export interface FileMetadataExtended extends files.FileMetadata {
 	fileBlob?: Blob;
 }
 const BATCH_DELAY_TIME = 1000;
-const THROTTLE_DELAY_TIME = 500;
+const THROTTLE_DELAY_TIME = 100;
 
 export const REDIRECT_URI = "obsidian://connect-dropbox";
 export const CLIENT_ID = "vofawt4jgywrgey";
@@ -308,29 +309,122 @@ export class DropboxProvider implements Provider {
 				console.error("Dropbox filesDeleteBatch Error:", e);
 			});
 	}
-	createFile = throttleProcess(
+	// TODO: Throttle is the wrong name for this. it should be batch or delay
+	batchCreateFile = batch<{ path: string; contents: ArrayBuffer }>(
 		this._createFile.bind(this),
-		THROTTLE_DELAY_TIME,
+		500,
 	);
+	async _createFile(args: { path: string; contents: ArrayBuffer }[]) {
+		console.log("_createFile args:", args);
 
-	private _createFile({
-		path,
-		contents,
-		callback,
-	}: {
-		path: string;
-		contents: string;
-		callback: (args: files.FileMetadata) => void;
-	}) {
+		const sessionIds = await this._batchCreateFileStart(args.length);
+		// If an error happens here, we still need to fire Finally to close the batch
+		const { fulfilled, rejected } = await this._batchCreateFileAppend({
+			files: args,
+			sessionIds,
+		});
+
+		await this._batchCreateFileFinish(fulfilled);
+
+		// TODO: Handle rejected
+		if (rejected.length) {
+			console.log("REJECTED UPDATES:", rejected);
+		}
+	}
+
+	_batchCreateFileStart(numSessions: number) {
 		return this.dropbox
-			.filesUpload({
-				path: path,
-				contents: contents,
+			.filesUploadSessionStartBatch({
+				num_sessions: numSessions,
 			})
-			.then((res) => callback(res.result))
-			.catch((e: any) => {
-				console.error("Dropbox filesUpload Error:", e);
-			});
+			.then((res) => res.result.session_ids);
+	}
+
+	_batchCreateFileAppend(args: {
+		files: { path: string; contents: ArrayBuffer }[];
+		sessionIds: string[];
+	}) {
+		const { files, sessionIds } = args;
+		const entries = [];
+		for (let i = 0; i < files.length; i++) {
+			console.log("bytesize:", files[i].contents.byteLength);
+
+			// NOTE: This assumes all files will be less than 150Mb
+			// An improvement can be made to split the file into 150Mb
+			// parts upto a max size of 350GB.
+			// This doesn't seem neccessary at this point for a note syncing
+			// app
+			let startCursor = {
+				offset: 0,
+				session_id: sessionIds[i],
+			};
+
+			let endCursor = {
+				offset: files[i].contents.byteLength,
+				session_id: sessionIds[i],
+			};
+			entries.push(
+				new Promise<{
+					path: string;
+					cursor: { offset: number; session_id: string };
+					response: DropboxResponse<void>;
+				}>((res, rej) => {
+					this.dropbox
+						.filesUploadSessionAppendV2({
+							contents: files[i].contents,
+							cursor: startCursor,
+							close: true,
+						})
+						.then((response) => {
+							res({
+								cursor: endCursor,
+								path: files[i].path,
+								response,
+							});
+						})
+						.catch((e) => {
+							rej(e);
+						});
+				}),
+			);
+		}
+
+		return Promise.allSettled(entries).then((settledEntreis) => {
+			const fulfilled = settledEntreis.filter(
+				(entry) => entry.status == "fulfilled",
+			) as PromiseFulfilledResult<{
+				path: string;
+				cursor: { offset: number; session_id: string };
+				response: DropboxResponse<void>;
+			}>[];
+
+			const rejected = settledEntreis.filter(
+				(entry) => entry.status == "rejected",
+			) as PromiseRejectedResult[];
+
+			return {
+				fulfilled,
+				rejected,
+			};
+		});
+	}
+	async _batchCreateFileFinish(
+		entries: PromiseFulfilledResult<{
+			path: string;
+			cursor: { offset: number; session_id: string };
+			response: DropboxResponse<void>;
+		}>[],
+	) {
+		return this.dropbox.filesUploadSessionFinishBatchV2({
+			entries: entries.map((entry) => {
+				return {
+					commit: {
+						path: entry.value.path,
+					},
+					cursor: entry.value.cursor,
+				};
+			}),
+		});
 	}
 
 	/*
