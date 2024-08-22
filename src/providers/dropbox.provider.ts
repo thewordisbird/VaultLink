@@ -1,6 +1,6 @@
 import { Dropbox, DropboxAuth, DropboxResponse, files } from "dropbox";
 import { dropboxContentHasher } from "./dropbox.hasher";
-import { batch, batchProcess, throttleProcess } from "src/utils";
+import { batch, batchProcess } from "src/utils";
 import type { Folder } from "../types";
 import { Provider } from "./types";
 import { TFile } from "obsidian";
@@ -224,7 +224,7 @@ export class DropboxProvider implements Provider {
 	}
 
 	/* File and Folder Controls */
-	batchCreateFolder = batchProcess(
+	batchCreateFolder = batch<string>(
 		this._batchCreateFolder.bind(this),
 		BATCH_DELAY_TIME,
 	);

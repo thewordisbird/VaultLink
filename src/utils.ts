@@ -27,36 +27,6 @@ export function batchProcess<A>(callback: BatchCallback<A>, batchTime: number) {
 	return addToQueue;
 }
 
-type ThrottleCallback = (args: unknown) => void;
-export function throttleProcess(
-	callback: ThrottleCallback,
-	throttleTime: number,
-) {
-	const queue: unknown[] = [];
-	let intervalId: NodeJS.Timer | null = null;
-
-	const flushQueue = () => {
-		intervalId = setInterval(async () => {
-			if (queue.length == 0) {
-				clearInterval(intervalId!);
-				intervalId = null;
-			} else {
-				const cbArgs = queue.shift();
-				await callback.call(null, cbArgs);
-			}
-		}, throttleTime);
-	};
-
-	const addToQueue = (args: unknown) => {
-		console.log("args:", args);
-		queue.push(args);
-		if (!intervalId) flushQueue();
-	};
-
-	// Return an object with the addToQueue function
-	return addToQueue;
-}
-
 export function batch<I>(
 	func: (args: I[]) => void | Promise<void>,
 	wait: number,
