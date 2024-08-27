@@ -3,11 +3,12 @@ import { PluginSettings } from "src/obsidian/settings";
 import { Provider } from "src/providers/types";
 
 import type { files } from "dropbox";
-
-declare const __brand: unique symbol;
-
-type ClientFilePath = string & { [__brand]: "client path" };
-type RemoteFilePath = string & { [__brand]: "remote path" };
+import {
+	batch,
+	convertRemoteToClientPath,
+	RemoteFilePath,
+	sanitizeRemotePath,
+} from "src/utils";
 
 type FileSyncMetadata = TFile & {
 	//clientPath: ClientFilePath;
@@ -30,11 +31,28 @@ enum SyncStatus {
 	deletedOnServer = "DELETED_ON_SERVER",
 	remoteAheadFolder = "REMOTE_AHEAD_FOLDER",
 }
+
+interface VFSNode extends TAbstractFile {
+	rev: string | undefined;
+	contentHash: string | undefined;
+	fullPath: string;
+}
+
+function vfsNodeFactory(folderOrFile: TAbstractFile): VFSNode {
+	return {
+		...folderOrFile,
+		rev: undefined,
+		contentHash: undefined,
+		fullPath: "",
+	};
+}
+
 export class Sync {
 	provider: Provider;
 	fileMap: Map<RemoteFilePath, FileSyncMetadata> | undefined;
 	obsidianApp: App;
 	settings: PluginSettings;
+	vfs: VFSNode;
 	_cursor: string | null;
 
 	constructor(args: {
@@ -46,6 +64,14 @@ export class Sync {
 		this.settings = args.settings;
 		this.provider = args.provider;
 	}
+
+	// async initializeVFS(){
+	// 	const foldersOrFiles = this.obsidianApp.vault.getAllLoadedFiles();
+	// 	for (let folderOrFile of foldersOrFiles){
+	// 		let node = new VFS(folderOrFile);
+	//
+	// 	}
+	// };
 
 	async initializeFileMap(args: {
 		clientFoldersOrFiles: TAbstractFile[];
@@ -62,7 +88,7 @@ export class Sync {
 					await this.obsidianApp.vault.readBinary(clientFolderOrFile),
 			});
 
-			let sanitizedRemotePath = this.sanitizeRemotePath({
+			let sanitizedRemotePath = sanitizeRemotePath({
 				vaultRoot: this.settings.cloudVaultPath!,
 				filePath: clientFolderOrFile.path,
 			});
@@ -93,7 +119,7 @@ export class Sync {
 			const file = this.obsidianApp.vault.getFileByPath(fileData.path);
 			if (!file) return;
 
-			const sanitizedRemotePath = this.sanitizeRemotePath({
+			const sanitizedRemotePath = sanitizeRemotePath({
 				vaultRoot: this.settings.cloudVaultPath,
 				filePath: file.path,
 			});
@@ -169,7 +195,7 @@ export class Sync {
 			/* This taggins system is specific to dropbox. As additional Providers are added a plugin tagging system should be implemented. */
 			// if (remoteFileMetadata[".tag"] != "file") continue;
 
-			let sanitizedRemotePath = this.sanitizeRemotePath({
+			let sanitizedRemotePath = sanitizeRemotePath({
 				filePath: remoteFileMetadata.path_lower!,
 			});
 			let clientFileMetadata = this.fileMap.get(sanitizedRemotePath);
@@ -274,8 +300,7 @@ export class Sync {
 		if (!this.fileMap) {
 			throw new Error("Sync Error: fileMap not initialized");
 		}
-		console.log("1. Entry");
-		const sanitizedRemotePath = this.sanitizeRemotePath({
+		const sanitizedRemotePath = sanitizeRemotePath({
 			vaultRoot: this.settings.cloudVaultPath,
 			filePath: args.folderOrFile.path,
 		});
@@ -285,21 +310,16 @@ export class Sync {
 			return;
 		}
 
-		console.log("2. Not Folder");
 		if (args.folderOrFile instanceof TFile) {
-			console.log("3. Is File");
-			// Get the binary file data
 			const binaryFileContents = await this.obsidianApp.vault.readBinary(
 				args.folderOrFile,
 			);
 
-			console.log("4. Binary Read:", binaryFileContents);
 			const entries = await this.provider.batchCreateFile({
 				path: sanitizedRemotePath,
 				contents: binaryFileContents,
 			});
 
-			console.log("5. Batch Complete:", entries);
 			for (let entry of entries.result.entries) {
 				// TODO: This shouldn't bee needed. improve typing on createFile
 				if (entry[".tag"] == "failure") continue;
@@ -316,39 +336,72 @@ export class Sync {
 		}
 	}
 
-	reconcileMoveFileOnClient(args: {
+	async reconcileMoveFileOnClient(args: {
 		folderOrFile: TAbstractFile;
 		ctx: string;
 	}) {
+		console.log("reconcileMoveFileOnClient - start:", args);
 		if (!this.fileMap) {
 			throw new Error("Sync Error: fileMap not initialized");
 		}
-		const fromPath = this.sanitizeRemotePath({
-			vaultRoot: this.settings.cloudVaultPath,
-			filePath: args.ctx,
-		});
-		const toPath = this.sanitizeRemotePath({
-			vaultRoot: this.settings.cloudVaultPath,
-			filePath: args.folderOrFile.path,
+
+		try {
+			const { results, items } =
+				await this.batchRenameFolderOrFileV2(args);
+
+			const entries = await this.provider.processBatchRenameFolderOrFile(
+				results.map((result) => {
+					const fromPath = sanitizeRemotePath({
+						vaultRoot: this.settings.cloudVaultPath,
+						filePath: result.ctx,
+					});
+					const toPath = sanitizeRemotePath({
+						vaultRoot: this.settings.cloudVaultPath,
+						filePath: result.folderOrFile.path,
+					});
+
+					return {
+						from_path: fromPath,
+						to_path: toPath,
+					};
+				}),
+			);
+
+			console.log("ENTRIES:", entries);
+			// Update filemap
+		} catch (e) {}
+	}
+
+	batchRenameFolderOrFileV2 = batch<{
+		folderOrFile: TAbstractFile;
+		ctx: string;
+	}>(this._processBatchReanemFolderOrFileV2.bind(this), 250);
+
+	_processBatchReanemFolderOrFileV2(
+		args: { folderOrFile: TAbstractFile; ctx: string }[],
+	) {
+		console.log("foldersOrFiles:", args);
+		const foldersToProcess = args.filter(
+			({ folderOrFile }) => folderOrFile instanceof TFolder,
+		);
+
+		console.log("foldersToProcess:", foldersToProcess);
+
+		const folders = new Set(
+			foldersToProcess.map(({ folderOrFile }) => folderOrFile.name),
+		);
+		console.log("folders:", folders);
+
+		const filesToProcess = args.filter(({ folderOrFile }) => {
+			return (
+				folderOrFile instanceof TFile &&
+				!folders.has(folderOrFile.parent?.name || "")
+			);
 		});
 
-		this.provider.batchRenameFolderOrFile({
-			from_path: fromPath,
-			to_path: toPath,
-		});
+		console.log("filesToProcess:", filesToProcess);
 
-		// TODO: This should be queued until the batch transaction is verified as bening completed
-		let syncData = this.fileMap.get(fromPath);
-		// TODO: This should be an error state
-		if (!syncData) return;
-
-		this.fileMap.delete(fromPath);
-		this.fileMap.set(toPath, {
-			...syncData,
-			...args.folderOrFile,
-			//clientPath: this.convertRemoteToClientPath({ remotePath: toPath }),
-			remotePath: toPath,
-		});
+		return [...foldersToProcess, ...filesToProcess];
 	}
 
 	reconcileDeletedOnClient(args: { folderOrFile: TAbstractFile }) {
@@ -356,7 +409,7 @@ export class Sync {
 			throw new Error("Sync Error: fileMap not initialized");
 		}
 
-		const sanitizedPath = this.sanitizeRemotePath({
+		const sanitizedPath = sanitizeRemotePath({
 			vaultRoot: this.settings.cloudVaultPath,
 			filePath: args.folderOrFile.path,
 		});
@@ -374,11 +427,11 @@ export class Sync {
 			throw new Error("Sync Error: fileMap not initialized");
 		}
 
-		const sanitizedRemotePath = this.sanitizeRemotePath({
+		const sanitizedRemotePath = sanitizeRemotePath({
 			vaultRoot: this.settings.cloudVaultPath,
 			filePath: args.remoteFileMetadata.path_lower!,
 		});
-		const sanitizedClientPath = this.convertRemoteToClientPath({
+		const sanitizedClientPath = convertRemoteToClientPath({
 			remotePath: sanitizedRemotePath,
 		});
 
@@ -412,7 +465,7 @@ export class Sync {
 		let clientFileMetadata: FileSyncMetadata | undefined =
 			args.clientFileMetadata;
 		if (args.clientFile) {
-			const sanitizedRemotePath = this.sanitizeRemotePath({
+			const sanitizedRemotePath = sanitizeRemotePath({
 				vaultRoot: this.settings.cloudVaultPath!,
 				filePath: args.clientFile.path,
 			});
@@ -464,12 +517,12 @@ export class Sync {
 
 	reconcileRemoteAheadFolder(args: { remoteFileMetadata: RemoteFileData }) {
 		// TODO: sanitizedRemotePath should handle undefined path_lower
-		const sanitizedRemotePath = this.sanitizeRemotePath({
+		const sanitizedRemotePath = sanitizeRemotePath({
 			vaultRoot: this.settings.cloudVaultPath,
 			filePath: args.remoteFileMetadata.path_lower!,
 		});
 
-		const sanitizedClientPath = this.convertRemoteToClientPath({
+		const sanitizedClientPath = convertRemoteToClientPath({
 			remotePath: sanitizedRemotePath,
 		});
 		return this.obsidianApp.vault.createFolder(sanitizedClientPath);
@@ -486,12 +539,12 @@ export class Sync {
 			path: args.remoteFileMetadata.path_lower!,
 		});
 
-		const sanitizedRemotePath = this.sanitizeRemotePath({
+		const sanitizedRemotePath = sanitizeRemotePath({
 			vaultRoot: this.settings.cloudVaultPath,
 			filePath: remoteFileContents.path_lower!,
 		});
 
-		const sanitizedClientPath = this.convertRemoteToClientPath({
+		const sanitizedClientPath = convertRemoteToClientPath({
 			remotePath: sanitizedRemotePath,
 		});
 
@@ -515,34 +568,6 @@ export class Sync {
 		} catch (e) {
 			console.error("WHOOPS!", e);
 		}
-	}
-
-	sanitizeRemotePath(args: {
-		vaultRoot?: string;
-		filePath: string;
-	}): RemoteFilePath {
-		// TODO: Add validation & error handling
-		if (args.vaultRoot == undefined) {
-			return args.filePath.toLowerCase() as RemoteFilePath;
-		}
-		return `/${args.vaultRoot}/${args.filePath}`.toLowerCase() as RemoteFilePath;
-	}
-
-	sanitizeClientPath(args: { filePath: string }): ClientFilePath {
-		return args.filePath.toLowerCase() as ClientFilePath;
-	}
-
-	convertClientToRemotePath(args: {
-		clientPath: ClientFilePath;
-	}): RemoteFilePath {
-		return ("/" + args.clientPath) as RemoteFilePath;
-	}
-
-	convertRemoteToClientPath(args: {
-		remotePath: RemoteFilePath;
-	}): ClientFilePath {
-		return args.remotePath.split("/").slice(4).join("/") as ClientFilePath;
-		//return args.remotePath.slice(1) as ClientFilePath;
 	}
 
 	public set cursor(cursor: string | null) {

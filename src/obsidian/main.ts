@@ -164,12 +164,13 @@ export default class VaultLink extends Plugin {
 
 		this.registerEvent(
 			this.app.vault.on("rename", (folderOrFile, ctx) => {
-				console.log("rename:", folderOrFile, ctx);
+				console.log("rename - start:", folderOrFile, ctx);
 				fileSync
 					.reconcileMoveFileOnClient({ folderOrFile, ctx })
 					.catch((e) => {
 						console.error("Rename Event Error:", e);
 					});
+				console.log("rename - end:");
 			}),
 		);
 

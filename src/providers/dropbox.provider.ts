@@ -1,8 +1,9 @@
 import { Dropbox, DropboxAuth, DropboxResponse, files } from "dropbox";
 import { dropboxContentHasher } from "./dropbox.hasher";
-import { batch } from "src/utils";
+import { batchProcess, exponentialBackoff } from "src/utils";
 import type { Folder } from "../types";
 import { Provider } from "./types";
+import { RemoteFilePath } from "src/sync/sync";
 
 // TODO: All listfolder, listFiles, listFilesContinue need to consider has_more
 
@@ -222,7 +223,7 @@ export class DropboxProvider implements Provider {
 	}
 
 	/* File and Folder Controls */
-	batchCreateFolder = batch<string, void>(
+	batchCreateFolder = batchProcess<string, void>(
 		this._batchCreateFolder.bind(this),
 		BATCH_DELAY_TIME,
 	);
@@ -242,26 +243,81 @@ export class DropboxProvider implements Provider {
 			});
 	}
 
-	batchRenameFolderOrFile = batch<
-		{ from_path: string; to_path: string },
-		Promise<void>
+	batchRenameFolderOrFile = batchProcess<
+		{ from_path: RemoteFilePath; to_path: RemoteFilePath },
+		files.RelocationBatchResultEntry[]
 	>(this._batchRenameFolderOrFile.bind(this), BATCH_DELAY_TIME);
 
 	private _batchRenameFolderOrFile(
-		args: { from_path: string; to_path: string }[],
+		args: { from_path: RemoteFilePath; to_path: RemoteFilePath }[],
 	) {
 		console.log("_batchRenameFolderOrFile:", args);
 		return this.dropbox
 			.filesMoveBatchV2({ entries: args })
-			.then((res) => {
-				console.log("filesCreateFolderBatch Res:", res);
-			})
-			.catch((e: any) => {
-				console.error("Dropbox filesCreateFolderBatch Error:", e);
+			.then(async (res) => {
+				if (res.result[".tag"] == "complete") return res.result.entries;
+				else if (res.result[".tag"] == "async_job_id") {
+					return this.batchRenameFolderOrFileCheck({
+						asyncJobId: res.result.async_job_id,
+					}).then((res) => {
+						return res.result.entries;
+					});
+				} else {
+					throw new Error(
+						`Unknown ".tag" property: ${res.result[".tag"]}`,
+					);
+				}
 			});
 	}
 
-	batchDeleteFolderOrFile = batch<string, Promise<void>>(
+	private processBatchRenameFolderOrFile(
+		args: { from_path: RemoteFilePath; to_path: RemoteFilePath }[],
+	) {
+		console.log("_batchRenameFolderOrFile:", args);
+		return this.dropbox
+			.filesMoveBatchV2({ entries: args })
+			.then(async (res) => {
+				if (res.result[".tag"] == "complete") return res.result.entries;
+				else if (res.result[".tag"] == "async_job_id") {
+					return this.batchRenameFolderOrFileCheck({
+						asyncJobId: res.result.async_job_id,
+					}).then((res) => {
+						return res.result.entries;
+					});
+				} else {
+					throw new Error(
+						`Unknown ".tag" property: ${res.result[".tag"]}`,
+					);
+				}
+			});
+	}
+
+	batchRenameFolderOrFileCheck = exponentialBackoff<
+		{ asyncJobId: string },
+		DropboxResponse<files.RelocationBatchV2JobStatus>,
+		DropboxResponse<files.RelocationBatchV2JobStatusComplete>
+	>({
+		func: this._batchRenameFolderOrFileCheck.bind(this),
+		checkFunc: this._batchRenameFolderOrFileCheckIsSuccess.bind(this),
+		interval: 250,
+		maxRetry: 10,
+		growthFactor: 2,
+	});
+
+	// (property) DropboxResponse<files.RelocationBatchV2JobStatus>.result: files.RelocationBatchV2JobStatusComplete
+	_batchRenameFolderOrFileCheck(args: { asyncJobId: string }) {
+		return this.dropbox.filesMoveBatchCheckV2({
+			async_job_id: args.asyncJobId,
+		});
+	}
+
+	_batchRenameFolderOrFileCheckIsSuccess(
+		args: DropboxResponse<files.RelocationBatchV2JobStatus>,
+	) {
+		return args.result[".tag"] == "complete";
+	}
+
+	batchDeleteFolderOrFile = batchProcess<string, Promise<void>>(
 		this._batchDeleteFolderOfFile.bind(this),
 		BATCH_DELAY_TIME,
 	);
@@ -278,7 +334,7 @@ export class DropboxProvider implements Provider {
 			});
 	}
 	// TODO: Throttle is the wrong name for this. it should be batch or delay
-	batchCreateFile = batch<
+	batchCreateFile = batchProcess<
 		{ path: string; contents: ArrayBuffer },
 		Promise<DropboxResponse<files.UploadSessionFinishBatchResult>>
 	>(this._createFile.bind(this), BATCH_DELAY_TIME);

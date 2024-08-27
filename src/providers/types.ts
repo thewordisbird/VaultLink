@@ -1,4 +1,5 @@
 import type { files, DropboxResponse } from "dropbox";
+import type { RemoteFilePath } from "src/sync/sync";
 import { FileMetadataExtended } from "./dropbox.provider";
 
 export interface Provider {
@@ -45,11 +46,26 @@ export interface Provider {
 		cancel: () => void;
 	};
 	batchRenameFolderOrFile: {
-		(args: { from_path: string; to_path: string }): Promise<Promise<void>>;
+		(args: {
+			from_path: RemoteFilePath;
+			to_path: RemoteFilePath;
+		}): Promise<{
+			items: {
+				from_path: RemoteFilePath;
+				to_path: RemoteFilePath;
+			}[];
+			results: files.RelocationBatchResultEntry[];
+		}>;
 		cancel: () => void;
 	};
 	batchDeleteFolderOrFile: {
 		(args: string): Promise<Promise<void>>;
 		cancel: () => void;
 	};
+	processBatchRenameFolderOrFile(
+		args: {
+			from_path: RemoteFilePath;
+			to_path: RemoteFilePath;
+		}[],
+	): Promise<files.RelocationBatchResultEntry[]>;
 }
