@@ -1,4 +1,4 @@
-import { App, TAbstractFile, TFile, TFolder } from "obsidian";
+import { App, Notice, TAbstractFile, TFile, TFolder } from "obsidian";
 import { PluginSettings } from "src/obsidian/settings";
 import { Provider } from "src/providers/types";
 
@@ -32,27 +32,11 @@ enum SyncStatus {
 	remoteAheadFolder = "REMOTE_AHEAD_FOLDER",
 }
 
-interface VFSNode extends TAbstractFile {
-	rev: string | undefined;
-	contentHash: string | undefined;
-	fullPath: string;
-}
-
-function vfsNodeFactory(folderOrFile: TAbstractFile): VFSNode {
-	return {
-		...folderOrFile,
-		rev: undefined,
-		contentHash: undefined,
-		fullPath: "",
-	};
-}
-
 export class Sync {
 	provider: Provider;
 	fileMap: Map<RemoteFilePath, FileSyncMetadata> | undefined;
 	obsidianApp: App;
 	settings: PluginSettings;
-	vfs: VFSNode;
 	_cursor: string | null;
 
 	constructor(args: {
@@ -64,14 +48,6 @@ export class Sync {
 		this.settings = args.settings;
 		this.provider = args.provider;
 	}
-
-	// async initializeVFS(){
-	// 	const foldersOrFiles = this.obsidianApp.vault.getAllLoadedFiles();
-	// 	for (let folderOrFile of foldersOrFiles){
-	// 		let node = new VFS(folderOrFile);
-	//
-	// 	}
-	// };
 
 	async initializeFileMap(args: {
 		clientFoldersOrFiles: TAbstractFile[];
@@ -368,7 +344,100 @@ export class Sync {
 			);
 
 			console.log("ENTRIES:", entries);
-			// Update filemap
+			for (let entry of entries) {
+				console.log("ENTRY:", entry);
+				if (entry[".tag"] == "failure") {
+					// TODO: Improve error messages
+					new Notice("Provider Sync Error", 0);
+					continue;
+				}
+
+				if (entry[".tag"] == "success") {
+					if (entry.success[".tag"] == "folder") {
+						let entryPath = entry.success.path_lower!;
+						let entryName = entry.success.name;
+
+						// get all sub files from items to update in fileMap
+						let subFiles = items.filter((item) => {
+							console.log(
+								"Parent Path:",
+								item.folderOrFile.parent?.name,
+							);
+							console.log("entryName:", entryName);
+
+							return (
+								item.folderOrFile instanceof TFile &&
+								item.folderOrFile.parent?.name == entryName
+							);
+						});
+						console.log(
+							"PROCESS FOLDER ENTRY - subFiles:",
+							subFiles,
+						);
+
+						subFiles.forEach((subFile) => {
+							const sanitizedFromPath = sanitizeRemotePath({
+								vaultRoot: this.settings.cloudVaultPath,
+								filePath: subFile.ctx,
+							});
+							const sanitizedToPath = sanitizeRemotePath({
+								vaultRoot: this.settings.cloudVaultPath,
+								filePath: subFile.folderOrFile.path,
+							});
+
+							let clientFileMetadata =
+								this.fileMap?.get(sanitizedFromPath);
+							if (clientFileMetadata)
+								this.fileMap?.delete(sanitizedFromPath);
+
+							this.fileMap?.set(sanitizedToPath, {
+								...(subFile.folderOrFile as TFile),
+								remotePath: sanitizedToPath,
+								rev: clientFileMetadata?.rev,
+								fileHash: clientFileMetadata?.fileHash,
+							});
+						});
+					}
+
+					if (entry.success[".tag"] == "file") {
+						const providerPath = entry.success.path_lower;
+						const clientFile = items.find(
+							(item) => item.folderOrFile.path == providerPath,
+						);
+						// TODO: This shouldn't be possible
+						console.log(
+							"PROCESS FILE ENTRY - subFiles:",
+							clientFile,
+						);
+						if (!clientFile) continue;
+
+						const sanitizedFromPath = sanitizeRemotePath({
+							vaultRoot: this.settings.cloudVaultPath,
+							filePath: clientFile.ctx,
+						});
+						const sanitizedToPath = sanitizeRemotePath({
+							vaultRoot: this.settings.cloudVaultPath,
+							filePath: clientFile.folderOrFile.path,
+						});
+
+						let clientFileMetadata =
+							this.fileMap?.get(sanitizedFromPath);
+						if (clientFileMetadata)
+							this.fileMap?.delete(sanitizedFromPath);
+
+						this.fileMap?.set(sanitizedToPath, {
+							...(clientFile.folderOrFile as TFile),
+							remotePath: sanitizedToPath,
+							rev: clientFileMetadata?.rev,
+							fileHash: clientFileMetadata?.fileHash,
+						});
+					}
+
+					// TODO: There is a entry.success[".tag"] == "deleted" case possibility
+
+					console.log("FileMap after Move:", this.fileMap);
+				}
+			}
 		} catch (e) {}
 	}
 

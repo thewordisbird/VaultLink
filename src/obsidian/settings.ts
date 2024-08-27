@@ -60,13 +60,20 @@ export class SettingsTab extends PluginSettingTab {
 
 		pubsub.subscribe(
 			PubsubTopic.SET_VAULT_PATH,
-			async (args: { payload: string }) => {
+			(args: { payload: string }) => {
 				const { payload } = args;
 
 				const vaultPathInput = document.getElementById(
 					"vault_path_input",
 				) as HTMLInputElement;
 				vaultPathInput.value = payload;
+			},
+		);
+
+		pubsub.subscribe(
+			PubsubTopic.SYNC_ERROR,
+			(args: { payload: string }) => {
+				new Notice(args.payload, 0);
 			},
 		);
 	}
