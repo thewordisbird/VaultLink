@@ -1,7 +1,6 @@
 import { App, Notice, TAbstractFile, TFile, TFolder } from "obsidian";
 import { PluginSettings } from "src/obsidian/settings";
 import { Provider } from "src/providers/types";
-
 import type { files } from "dropbox";
 import {
 	batch,
@@ -11,7 +10,6 @@ import {
 } from "src/utils";
 
 type FileSyncMetadata = TFile & {
-	//clientPath: ClientFilePath;
 	remotePath: RemoteFilePath;
 	rev: string | undefined;
 	fileHash: string | undefined;
@@ -272,45 +270,91 @@ export class Sync {
 		throw new Error("Sync Error - Invalid sync condition");
 	}
 
-	async reconcileCreateFileOnClient(args: { folderOrFile: TAbstractFile }) {
+	public async reconcileCreateFileOnClient(args: {
+		folderOrFile: TAbstractFile;
+	}) {
 		if (!this.fileMap) {
 			throw new Error("Sync Error: fileMap not initialized");
 		}
-		const sanitizedRemotePath = sanitizeRemotePath({
-			vaultRoot: this.settings.cloudVaultPath,
-			filePath: args.folderOrFile.path,
-		});
 
 		if (args.folderOrFile instanceof TFolder) {
-			this.provider.batchCreateFolder(sanitizedRemotePath);
-			return;
+			try {
+				const folders = await this.batchCreateFolder(
+					args.folderOrFile,
+				).then((folders) => {
+					return folders.map((folder) => {
+						const sanitizedRemotePath = sanitizeRemotePath({
+							vaultRoot: this.settings.cloudVaultPath,
+							filePath: folder.path,
+						});
+
+						return sanitizedRemotePath;
+					});
+				});
+
+				await this.provider.processBatchCreateFolder({
+					paths: folders,
+				});
+			} catch (e) {
+				new Notice("Provider Sync Error");
+			}
 		}
 
 		if (args.folderOrFile instanceof TFile) {
-			const binaryFileContents = await this.obsidianApp.vault.readBinary(
-				args.folderOrFile,
-			);
+			try {
+				const files = await this.batchCreateFile(args.folderOrFile);
+				const binaryFileContents = await Promise.allSettled(
+					files.map((file) =>
+						this.obsidianApp.vault.readBinary(file),
+					),
+				);
 
-			const entries = await this.provider.batchCreateFile({
-				path: sanitizedRemotePath,
-				contents: binaryFileContents,
-			});
+				const toProcess: {
+					path: RemoteFilePath;
+					contents: ArrayBuffer;
+				}[] = [];
+				for (let i = 0; i < files.length; i++) {
+					const bFileContents = binaryFileContents[i];
+					if (bFileContents.status == "rejected") {
+						new Notice(
+							`Obsidian File Access Error: Unable to get contents of ${files[i].name}`,
+						);
+						continue;
+					}
+					const sanitizedRemotePath = sanitizeRemotePath({
+						vaultRoot: this.settings.cloudVaultPath,
+						filePath: files[i].path,
+					});
+					toProcess.push({
+						path: sanitizedRemotePath,
+						contents: bFileContents.value,
+					});
+				}
 
-			for (let entry of entries.result.entries) {
-				// TODO: This shouldn't bee needed. improve typing on createFile
-				if (entry[".tag"] == "failure") continue;
+				const entries =
+					await this.provider.batchCreateFileV2(toProcess);
 
-				this.fileMap.set(sanitizedRemotePath, {
-					...(args.folderOrFile as TFile),
-					remotePath: sanitizedRemotePath,
-					rev: entry.rev,
-					fileHash: entry.content_hash!,
-				});
+				for (let entry of entries.result.entries) {
+					// TODO: This shouldn't bee needed. improve typing on createFile
+					if (entry[".tag"] == "failure") continue;
+
+					this.fileMap.set(entry.path_lower as RemoteFilePath, {
+						...(args.folderOrFile as TFile),
+						remotePath: entry.path_lower as RemoteFilePath,
+						rev: entry.rev,
+						fileHash: entry.content_hash!,
+					});
+				}
+			} catch (e) {
+				new Notice("Provider Sync Error:");
 			}
 
 			console.log("fileMap after create:", this.fileMap);
 		}
 	}
+
+	private batchCreateFolder = batch<TFolder>({ wait: 250 });
+	private batchCreateFile = batch<TFile>({ wait: 250 });
 
 	public async reconcileMoveFileOnClient(args: {
 		folderOrFile: TAbstractFile;
@@ -422,7 +466,7 @@ export class Sync {
 	private batchRenameFolderOrFile = batch<{
 		folderOrFile: TAbstractFile;
 		ctx: string;
-	}>(this.processBatchReanemFolderOrFileV2.bind(this), 250);
+	}>({ func: this.processBatchReanemFolderOrFileV2.bind(this), wait: 250 });
 
 	private processBatchReanemFolderOrFileV2(
 		args: { folderOrFile: TAbstractFile; ctx: string }[],

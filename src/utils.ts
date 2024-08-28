@@ -35,20 +35,30 @@ export function batchProcess<I, R>(
 	return batched;
 }
 
-export function batch<I>(func: (args: I[]) => Promise<I[]>, wait: number) {
+export function batch<I>(args: {
+	func: (ags: I[]) => Promise<I[]>;
+	wait: number;
+}): (args: I) => Promise<{ items: I[]; results: I[] }>;
+export function batch<I>(args: { wait: number }): (args: I) => Promise<I[]>;
+export function batch<I>(args: {
+	func?: (args: I[]) => Promise<I[]>;
+	wait: number;
+}): (args: I) => Promise<{ items: I[]; results: I[] }> | Promise<I[]> {
+	const { func, wait } = args;
 	let items: I[] = [];
 	let timeoutId: string | number | NodeJS.Timeout | undefined;
 
 	function batched(args: I) {
-		return new Promise<{ items: I[]; results: I[] }>((res, rej) => {
+		return new Promise<{ items: I[]; results: I[] } | I[]>((res, rej) => {
 			if (timeoutId) clearTimeout(timeoutId);
 			items.push(args);
 			timeoutId = setTimeout(async () => {
 				try {
-					const results = await func(items);
-					const batchItems = [...items];
-
-					res({ items: batchItems, results });
+					if (func === undefined) {
+						res(items);
+					} else {
+						res({ items: [...items], results: await func(items) });
+					}
 				} catch (e) {
 					rej(e);
 				} finally {

@@ -31,13 +31,13 @@ export interface Provider {
 	revokeAuthorizationToken(): Promise<void>;
 	getAuthenticationUrl(): Promise<String>;
 	getCodeVerifier(): string;
-	batchCreateFolder: {
-		(args: string): Promise<{
-			items: string[];
-			results: void;
-		}>;
-		cancel: () => void;
-	};
+	// batchCreateFolder: {
+	// 	(args: string): Promise<{
+	// 		items: string[];
+	// 		results: void;
+	// 	}>;
+	// 	cancel: () => void;
+	// };
 
 	batchCreateFile: {
 		(args: { path: string; contents: ArrayBuffer }): Promise<{
@@ -48,19 +48,6 @@ export interface Provider {
 			results: Promise<
 				DropboxResponse<files.UploadSessionFinishBatchResult>
 			>;
-		}>;
-		cancel: () => void;
-	};
-	batchRenameFolderOrFile: {
-		(args: {
-			from_path: RemoteFilePath;
-			to_path: RemoteFilePath;
-		}): Promise<{
-			items: {
-				from_path: RemoteFilePath;
-				to_path: RemoteFilePath;
-			}[];
-			results: files.RelocationBatchResultEntry[];
 		}>;
 		cancel: () => void;
 	};
@@ -77,4 +64,15 @@ export interface Provider {
 			to_path: RemoteFilePath;
 		}[],
 	): Promise<files.RelocationBatchResultEntry[]>;
+
+	batchCreateFileV2(
+		args: {
+			path: string;
+			contents: ArrayBuffer;
+		}[],
+	): Promise<DropboxResponse<files.UploadSessionFinishBatchResult>>;
+
+	processBatchCreateFolder(args: {
+		paths: string[];
+	}): Promise<files.CreateFolderBatchResultEntry[]>;
 }

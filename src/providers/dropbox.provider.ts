@@ -222,24 +222,47 @@ export class DropboxProvider implements Provider {
 	}
 
 	/* File and Folder Controls */
-	batchCreateFolder = batchProcess<string, void>(
-		this._batchCreateFolder.bind(this),
-		BATCH_DELAY_TIME,
-	);
-
-	private _batchCreateFolder(paths: string[]) {
-		console.log("_batchDeleteFolderOrFile:", paths);
+	public processBatchCreateFolder(args: { paths: string[] }) {
 		return this.dropbox
-			.filesCreateFolderBatch({ paths })
+			.filesCreateFolderBatch({ paths: args.paths })
 			.then((res) => {
-				// This returns the results of the entry with a .tag property
-				// to say if the creation was successful or not.
-				// TODO: failed itmes should be dealt with
-				console.log("filesCreateFolderBatch Res:", res);
-			})
-			.catch((e: any) => {
-				console.error("Dropbox filesCreateFolderBatch Error:", e);
+				if (res.result[".tag"] == "complete") return res.result.entries;
+				else if (res.result[".tag"] == "async_job_id") {
+					return this.batchCreateFolderCheck({
+						asyncJobId: res.result.async_job_id,
+					}).then((res) => {
+						return res.result.entries;
+					});
+				} else {
+					throw new Error(
+						`Unknown ".tag" property: ${res.result[".tag"]}`,
+					);
+				}
 			});
+	}
+
+	private batchCreateFolderCheck = exponentialBackoff<
+		{ asyncJobId: string },
+		DropboxResponse<files.CreateFolderBatchJobStatus>,
+		DropboxResponse<files.CreateFolderBatchJobStatusComplete>
+	>({
+		func: this._batchCreateFolderCheck.bind(this),
+		checkFunc: this._batchCreateFolderCheckIsSuccess.bind(this),
+		interval: 250,
+		maxRetry: 10,
+		growthFactor: 2,
+	});
+
+	private _batchCreateFolderCheck(args: { asyncJobId: string }) {
+		return this.dropbox.filesCreateFolderBatchCheck({
+			async_job_id: args.asyncJobId,
+		});
+	}
+
+	private _batchCreateFolderCheckIsSuccess(
+		args: DropboxResponse<files.CreateFolderBatchJobStatus>,
+	) {
+		return args.result[".tag"] == "complete";
 	}
 
 	public processBatchRenameFolderOrFile(
@@ -310,6 +333,29 @@ export class DropboxProvider implements Provider {
 	>(this._createFile.bind(this), BATCH_DELAY_TIME);
 
 	private async _createFile(args: { path: string; contents: ArrayBuffer }[]) {
+		console.log("_createFile start:", args);
+
+		const sessionIds = await this._batchCreateFileStart(args.length);
+		// If an error happens here, we still need to fire Finally to close the batch
+		const { fulfilled, rejected } = await this._batchCreateFileAppend({
+			files: args,
+			sessionIds,
+		});
+
+		// TODO: Should this be returned to the caller??
+		const finishResults = await this._batchCreateFileFinish(fulfilled);
+		console.log("finishResults:", finishResults);
+
+		// TODO: Handle rejected
+		if (rejected.length) {
+			console.log("REJECTED UPDATES:", rejected);
+		}
+
+		console.log("_createFile return:", finishResults);
+		return finishResults;
+	}
+
+	async batchCreateFileV2(args: { path: string; contents: ArrayBuffer }[]) {
 		console.log("_createFile start:", args);
 
 		const sessionIds = await this._batchCreateFileStart(args.length);
