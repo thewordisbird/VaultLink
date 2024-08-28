@@ -310,29 +310,50 @@ export class DropboxProvider implements Provider {
 		return args.result[".tag"] == "complete";
 	}
 
-	batchDeleteFolderOrFile = batchProcess<string, Promise<void>>(
-		this._batchDeleteFolderOfFile.bind(this),
-		BATCH_DELAY_TIME,
-	);
-
-	private _batchDeleteFolderOfFile(paths: string[]) {
-		console.log("_batchDeleteFolderOrFile:", paths);
-		this.dropbox
-			.filesDeleteBatch({ entries: paths.map((path) => ({ path })) })
-			.then((res) => {
-				console.log("filesDeleteBatch Res:", res);
-			})
-			.catch((e: any) => {
-				console.error("Dropbox filesDeleteBatch Error:", e);
+	public processBatchDeleteFolderOfFile(args: { paths: string[] }) {
+		return this.dropbox
+			.filesDeleteBatch({ entries: args.paths.map((path) => ({ path })) })
+			.then(async (res) => {
+				if (res.result[".tag"] == "complete") return res.result.entries;
+				else if (res.result[".tag"] == "async_job_id") {
+					return this.batchDeleteFolderOrFileCheck({
+						asyncJobId: res.result.async_job_id,
+					}).then((res) => res.result.entries);
+				} else {
+					throw new Error(
+						`Unknown ".tag" property: ${res.result[".tag"]}`,
+					);
+				}
 			});
 	}
 
-	batchCreateFile = batchProcess<
-		{ path: string; contents: ArrayBuffer },
-		Promise<DropboxResponse<files.UploadSessionFinishBatchResult>>
-	>(this._createFile.bind(this), BATCH_DELAY_TIME);
+	private batchDeleteFolderOrFileCheck = exponentialBackoff<
+		{ asyncJobId: string },
+		DropboxResponse<files.DeleteBatchJobStatus>,
+		DropboxResponse<files.DeleteBatchJobStatusComplete>
+	>({
+		func: this._batchDeleteFolderOrFileCheck.bind(this),
+		checkFunc: this._batchDeleteFolderOrFileCheckIsSuccess.bind(this),
+		interval: 250,
+		maxRetry: 10,
+		growthFactor: 2,
+	});
 
-	private async _createFile(args: { path: string; contents: ArrayBuffer }[]) {
+	private _batchDeleteFolderOrFileCheck(args: { asyncJobId: string }) {
+		return this.dropbox.filesDeleteBatchCheck({
+			async_job_id: args.asyncJobId,
+		});
+	}
+
+	private _batchDeleteFolderOrFileCheckIsSuccess(
+		args: DropboxResponse<files.RelocationBatchV2JobStatus>,
+	) {
+		return args.result[".tag"] == "complete";
+	}
+
+	public async processBatchCreateFile(
+		args: { path: string; contents: ArrayBuffer }[],
+	) {
 		console.log("_createFile start:", args);
 
 		const sessionIds = await this._batchCreateFileStart(args.length);
@@ -355,30 +376,7 @@ export class DropboxProvider implements Provider {
 		return finishResults;
 	}
 
-	async batchCreateFileV2(args: { path: string; contents: ArrayBuffer }[]) {
-		console.log("_createFile start:", args);
-
-		const sessionIds = await this._batchCreateFileStart(args.length);
-		// If an error happens here, we still need to fire Finally to close the batch
-		const { fulfilled, rejected } = await this._batchCreateFileAppend({
-			files: args,
-			sessionIds,
-		});
-
-		// TODO: Should this be returned to the caller??
-		const finishResults = await this._batchCreateFileFinish(fulfilled);
-		console.log("finishResults:", finishResults);
-
-		// TODO: Handle rejected
-		if (rejected.length) {
-			console.log("REJECTED UPDATES:", rejected);
-		}
-
-		console.log("_createFile return:", finishResults);
-		return finishResults;
-	}
-
-	_batchCreateFileStart(numSessions: number) {
+	private _batchCreateFileStart(numSessions: number) {
 		return this.dropbox
 			.filesUploadSessionStartBatch({
 				num_sessions: numSessions,
@@ -386,7 +384,7 @@ export class DropboxProvider implements Provider {
 			.then((res) => res.result.session_ids);
 	}
 
-	_batchCreateFileAppend(args: {
+	private _batchCreateFileAppend(args: {
 		files: { path: string; contents: ArrayBuffer }[];
 		sessionIds: string[];
 	}) {
@@ -454,7 +452,8 @@ export class DropboxProvider implements Provider {
 			};
 		});
 	}
-	async _batchCreateFileFinish(
+
+	private async _batchCreateFileFinish(
 		entries: PromiseFulfilledResult<{
 			path: string;
 			cursor: { offset: number; session_id: string };
@@ -473,7 +472,11 @@ export class DropboxProvider implements Provider {
 		});
 	}
 
-	updateFile(args: { path: string; rev: string; contents: ArrayBuffer }) {
+	public updateFile(args: {
+		path: string;
+		rev: string;
+		contents: ArrayBuffer;
+	}) {
 		return this.dropbox
 			.filesUpload({
 				mode: {
@@ -488,40 +491,7 @@ export class DropboxProvider implements Provider {
 			});
 	}
 
-	async sync(path: string) {
-		// call listfolders and populate revMap
-		let res = await this.dropbox.filesListFolder({ path, recursive: true });
-		do {
-			for (let entry of res.result.entries) {
-				console.log(entry);
-			}
-			res = await this.dropbox.filesListFolderContinue({
-				cursor: res.result.cursor,
-			});
-		} while (res.result.has_more);
-	}
-
-	getFileMetadata(args: {
-		path: string;
-	}): Promise<files.FileMetadataReference> {
-		return this.dropbox
-			.filesGetMetadata({
-				path: args.path,
-			})
-			.then((res) => {
-				if (res.result[".tag"] != "file") {
-					throw new Error("Error: file metadata does not exist");
-				}
-				return res.result;
-			});
-	}
-
-	// DEPRECIATED
-	createDropboxContentHash(args: { fileData: ArrayBuffer }) {
-		return dropboxContentHasher(args.fileData);
-	}
-
-	createFileHash(args: { fileData: ArrayBuffer }) {
+	public createFileHash(args: { fileData: ArrayBuffer }) {
 		return dropboxContentHasher(args.fileData);
 	}
 }

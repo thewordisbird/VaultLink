@@ -332,7 +332,7 @@ export class Sync {
 				}
 
 				const entries =
-					await this.provider.batchCreateFileV2(toProcess);
+					await this.provider.processBatchCreateFile(toProcess);
 
 				for (let entry of entries.result.entries) {
 					// TODO: This shouldn't bee needed. improve typing on createFile
@@ -488,20 +488,50 @@ export class Sync {
 		return [...foldersToProcess, ...filesToProcess];
 	}
 
-	reconcileDeletedOnClient(args: { folderOrFile: TAbstractFile }) {
+	public async reconcileDeletedOnClient(args: {
+		folderOrFile: TAbstractFile;
+	}) {
 		if (!this.fileMap) {
 			throw new Error("Sync Error: fileMap not initialized");
 		}
 
-		const sanitizedPath = sanitizeRemotePath({
-			vaultRoot: this.settings.cloudVaultPath,
-			filePath: args.folderOrFile.path,
-		});
+		try {
+			const deleted = await this.batchDeleteFolderOrFile(
+				args.folderOrFile,
+			);
 
-		this.provider.batchDeleteFolderOrFile(sanitizedPath);
+			const toProcess = deleted.map((folderOrFile) => {
+				const sanitizedPath = sanitizeRemotePath({
+					vaultRoot: this.settings.cloudVaultPath,
+					filePath: folderOrFile.path,
+				});
 
-		this.fileMap.delete(sanitizedPath);
+				return sanitizedPath;
+			});
+
+			const entries = await this.provider.processBatchDeleteFolderOfFile({
+				paths: toProcess,
+			});
+
+			for (let entry of entries) {
+				if (entry[".tag"] == "failure") {
+					// TODO: Improve error messages
+					new Notice("Provider Sync Error", 0);
+					continue;
+				}
+
+				if (entry[".tag"] == "success") {
+					this.fileMap.delete(
+						entry.metadata.path_lower as RemoteFilePath,
+					);
+				}
+			}
+		} catch (e) {
+			new Notice(`Provider Sync Error: ${e}`);
+		}
 	}
+
+	private batchDeleteFolderOrFile = batch<TAbstractFile>({ wait: 250 });
 
 	async reconcileDeletedOnServer(args: {
 		clientFileMetadata: FileSyncMetadata | undefined;

@@ -1,5 +1,5 @@
 import type { files, DropboxResponse } from "dropbox";
-import type { RemoteFilePath } from "src/sync/sync";
+import { RemoteFilePath } from "src/utils";
 import { FileMetadataExtended } from "./dropbox.provider";
 
 export interface Provider {
@@ -31,33 +31,6 @@ export interface Provider {
 	revokeAuthorizationToken(): Promise<void>;
 	getAuthenticationUrl(): Promise<String>;
 	getCodeVerifier(): string;
-	// batchCreateFolder: {
-	// 	(args: string): Promise<{
-	// 		items: string[];
-	// 		results: void;
-	// 	}>;
-	// 	cancel: () => void;
-	// };
-
-	batchCreateFile: {
-		(args: { path: string; contents: ArrayBuffer }): Promise<{
-			items: {
-				path: string;
-				contents: ArrayBuffer;
-			}[];
-			results: Promise<
-				DropboxResponse<files.UploadSessionFinishBatchResult>
-			>;
-		}>;
-		cancel: () => void;
-	};
-	batchDeleteFolderOrFile: {
-		(args: string): Promise<{
-			items: string[];
-			results: Promise<void>;
-		}>;
-		cancel: () => void;
-	};
 	processBatchRenameFolderOrFile(
 		args: {
 			from_path: RemoteFilePath;
@@ -65,7 +38,7 @@ export interface Provider {
 		}[],
 	): Promise<files.RelocationBatchResultEntry[]>;
 
-	batchCreateFileV2(
+	processBatchCreateFile(
 		args: {
 			path: string;
 			contents: ArrayBuffer;
@@ -75,4 +48,7 @@ export interface Provider {
 	processBatchCreateFolder(args: {
 		paths: string[];
 	}): Promise<files.CreateFolderBatchResultEntry[]>;
+	processBatchDeleteFolderOfFile(args: {
+		paths: string[];
+	}): Promise<files.DeleteBatchResultEntry[]>;
 }
