@@ -312,18 +312,16 @@ export class Sync {
 		}
 	}
 
-	async reconcileMoveFileOnClient(args: {
+	public async reconcileMoveFileOnClient(args: {
 		folderOrFile: TAbstractFile;
 		ctx: string;
 	}) {
-		console.log("reconcileMoveFileOnClient - start:", args);
 		if (!this.fileMap) {
 			throw new Error("Sync Error: fileMap not initialized");
 		}
 
 		try {
-			const { results, items } =
-				await this.batchRenameFolderOrFileV2(args);
+			const { results, items } = await this.batchRenameFolderOrFile(args);
 
 			const entries = await this.provider.processBatchRenameFolderOrFile(
 				results.map((result) => {
@@ -343,9 +341,7 @@ export class Sync {
 				}),
 			);
 
-			console.log("ENTRIES:", entries);
 			for (let entry of entries) {
-				console.log("ENTRY:", entry);
 				if (entry[".tag"] == "failure") {
 					// TODO: Improve error messages
 					new Notice("Provider Sync Error", 0);
@@ -353,27 +349,15 @@ export class Sync {
 				}
 
 				if (entry[".tag"] == "success") {
-					if (entry.success[".tag"] == "folder") {
-						let entryPath = entry.success.path_lower!;
-						let entryName = entry.success.name;
+					if (entry.success[".tag"] === "folder") {
+						const entryName = entry.success.name;
 
-						// get all sub files from items to update in fileMap
-						let subFiles = items.filter((item) => {
-							console.log(
-								"Parent Path:",
-								item.folderOrFile.parent?.name,
-							);
-							console.log("entryName:", entryName);
-
+						const subFiles = items.filter((item) => {
 							return (
 								item.folderOrFile instanceof TFile &&
 								item.folderOrFile.parent?.name == entryName
 							);
 						});
-						console.log(
-							"PROCESS FOLDER ENTRY - subFiles:",
-							subFiles,
-						);
 
 						subFiles.forEach((subFile) => {
 							const sanitizedFromPath = sanitizeRemotePath({
@@ -385,7 +369,7 @@ export class Sync {
 								filePath: subFile.folderOrFile.path,
 							});
 
-							let clientFileMetadata =
+							const clientFileMetadata =
 								this.fileMap?.get(sanitizedFromPath);
 							if (clientFileMetadata)
 								this.fileMap?.delete(sanitizedFromPath);
@@ -405,10 +389,6 @@ export class Sync {
 							(item) => item.folderOrFile.path == providerPath,
 						);
 						// TODO: This shouldn't be possible
-						console.log(
-							"PROCESS FILE ENTRY - subFiles:",
-							clientFile,
-						);
 						if (!clientFile) continue;
 
 						const sanitizedFromPath = sanitizeRemotePath({
@@ -420,7 +400,7 @@ export class Sync {
 							filePath: clientFile.folderOrFile.path,
 						});
 
-						let clientFileMetadata =
+						const clientFileMetadata =
 							this.fileMap?.get(sanitizedFromPath);
 						if (clientFileMetadata)
 							this.fileMap?.delete(sanitizedFromPath);
@@ -432,43 +412,34 @@ export class Sync {
 							fileHash: clientFileMetadata?.fileHash,
 						});
 					}
-
-					// TODO: There is a entry.success[".tag"] == "deleted" case possibility
-
-					console.log("FileMap after Move:", this.fileMap);
 				}
 			}
-		} catch (e) {}
+		} catch (e) {
+			new Notice(`Provider Sync Error: ${e}`);
+		}
 	}
 
-	batchRenameFolderOrFileV2 = batch<{
+	private batchRenameFolderOrFile = batch<{
 		folderOrFile: TAbstractFile;
 		ctx: string;
-	}>(this._processBatchReanemFolderOrFileV2.bind(this), 250);
+	}>(this.processBatchReanemFolderOrFileV2.bind(this), 250);
 
-	_processBatchReanemFolderOrFileV2(
+	private processBatchReanemFolderOrFileV2(
 		args: { folderOrFile: TAbstractFile; ctx: string }[],
 	) {
-		console.log("foldersOrFiles:", args);
 		const foldersToProcess = args.filter(
 			({ folderOrFile }) => folderOrFile instanceof TFolder,
 		);
 
-		console.log("foldersToProcess:", foldersToProcess);
-
 		const folders = new Set(
 			foldersToProcess.map(({ folderOrFile }) => folderOrFile.name),
 		);
-		console.log("folders:", folders);
 
-		const filesToProcess = args.filter(({ folderOrFile }) => {
-			return (
+		const filesToProcess = args.filter(
+			({ folderOrFile }) =>
 				folderOrFile instanceof TFile &&
-				!folders.has(folderOrFile.parent?.name || "")
-			);
-		});
-
-		console.log("filesToProcess:", filesToProcess);
+				!folders.has(folderOrFile.parent?.name || ""),
+		);
 
 		return [...foldersToProcess, ...filesToProcess];
 	}

@@ -32,17 +32,23 @@ export interface Provider {
 	getAuthenticationUrl(): Promise<String>;
 	getCodeVerifier(): string;
 	batchCreateFolder: {
-		(args: string): Promise<void>;
+		(args: string): Promise<{
+			items: string[];
+			results: void;
+		}>;
 		cancel: () => void;
 	};
 
 	batchCreateFile: {
-		(args: {
-			path: string;
-			contents: ArrayBuffer;
-		}): Promise<
-			Promise<DropboxResponse<files.UploadSessionFinishBatchResult>>
-		>;
+		(args: { path: string; contents: ArrayBuffer }): Promise<{
+			items: {
+				path: string;
+				contents: ArrayBuffer;
+			}[];
+			results: Promise<
+				DropboxResponse<files.UploadSessionFinishBatchResult>
+			>;
+		}>;
 		cancel: () => void;
 	};
 	batchRenameFolderOrFile: {
@@ -59,7 +65,10 @@ export interface Provider {
 		cancel: () => void;
 	};
 	batchDeleteFolderOrFile: {
-		(args: string): Promise<Promise<void>>;
+		(args: string): Promise<{
+			items: string[];
+			results: Promise<void>;
+		}>;
 		cancel: () => void;
 	};
 	processBatchRenameFolderOrFile(
