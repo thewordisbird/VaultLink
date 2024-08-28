@@ -47,14 +47,13 @@ export class Sync {
 		this.provider = args.provider;
 	}
 
-	async initializeFileMap(args: {
-		clientFoldersOrFiles: TAbstractFile[];
-	}): Promise<void> {
-		console.log("start - initializedFileMap:", args);
+	async initializeFileMap(): Promise<void> {
 		//if (this.fileMap) return;
 		this.fileMap = new Map();
 
-		for (let clientFolderOrFile of args.clientFoldersOrFiles) {
+		const clientFoldersOrFiles = this.obsidianApp.vault.getAllLoadedFiles();
+
+		for (let clientFolderOrFile of clientFoldersOrFiles) {
 			if (!(clientFolderOrFile instanceof TFile)) continue;
 
 			let fileHash = this.provider.createFileHash({
@@ -101,14 +100,16 @@ export class Sync {
 			this.obsidianApp.vault
 				.readBinary(file)
 				.then((contents) => {
-					this.provider.batchCreateFile({
-						path: sanitizedRemotePath,
-						contents,
-					});
+					this.provider.processBatchCreateFile([
+						{
+							path: sanitizedRemotePath,
+							contents,
+						},
+					]);
 				})
 				// TODO: Error handling
 				.catch((e) => {
-					console.error(e);
+					new Notice(`Provider Sync Error: ${e}`);
 				});
 		}
 
