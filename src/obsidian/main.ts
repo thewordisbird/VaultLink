@@ -84,9 +84,7 @@ export default class VaultLink extends Plugin {
 				this.settings.cloudVaultPath = payload;
 				await this.saveSettings();
 
-				const clientFoldersOrFiles = this.app.vault.getAllLoadedFiles();
-
-				await fileSync.initializeFileMap({ clientFoldersOrFiles });
+				await fileSync.initializeFileMap();
 				await fileSync.syncRemoteFiles();
 				await fileSync.syncClientFiles();
 			},
@@ -107,11 +105,7 @@ export default class VaultLink extends Plugin {
 		/** PROVIDER SYNC **/
 		if (await dropboxProvider.getAuthorizationState()) {
 			/** STARTUP SYNC **/
-			// build fileMap from the client files
-			console.log("Start Startup Sync");
-			const clientFoldersOrFiles = this.app.vault.getAllLoadedFiles();
-
-			fileSync.initializeFileMap({ clientFoldersOrFiles });
+			fileSync.initializeFileMap();
 
 			await fileSync.syncRemoteFiles();
 			/** END STARTUP SYNC **/
