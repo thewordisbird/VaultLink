@@ -8,6 +8,10 @@ import {
 	RemoteFilePath,
 	sanitizeRemotePath,
 } from "src/utils";
+import {
+	obsidianFileRetrievalError,
+	providerSyncError,
+} from "src/obsidian/notice";
 
 type FileSyncMetadata = TFile & {
 	remotePath: RemoteFilePath;
@@ -107,9 +111,8 @@ export class Sync {
 						},
 					]);
 				})
-				// TODO: Error handling
 				.catch((e) => {
-					new Notice(`Provider Sync Error: ${e}`);
+					providerSyncError(e);
 				});
 		}
 
@@ -297,7 +300,7 @@ export class Sync {
 					paths: folders,
 				});
 			} catch (e) {
-				new Notice("Provider Sync Error");
+				providerSyncError(e);
 			}
 		}
 
@@ -317,9 +320,7 @@ export class Sync {
 				for (let i = 0; i < files.length; i++) {
 					const bFileContents = binaryFileContents[i];
 					if (bFileContents.status == "rejected") {
-						new Notice(
-							`Obsidian File Access Error: Unable to get contents of ${files[i].name}`,
-						);
+						obsidianFileRetrievalError(files[i].name);
 						continue;
 					}
 					const sanitizedRemotePath = sanitizeRemotePath({
@@ -347,7 +348,7 @@ export class Sync {
 					});
 				}
 			} catch (e) {
-				new Notice("Provider Sync Error:");
+				providerSyncError(e);
 			}
 
 			console.log("fileMap after create:", this.fileMap);
@@ -388,8 +389,7 @@ export class Sync {
 
 			for (let entry of entries) {
 				if (entry[".tag"] == "failure") {
-					// TODO: Improve error messages
-					new Notice("Provider Sync Error", 0);
+					providerSyncError();
 					continue;
 				}
 
@@ -460,7 +460,7 @@ export class Sync {
 				}
 			}
 		} catch (e) {
-			new Notice(`Provider Sync Error: ${e}`);
+			providerSyncError(e);
 		}
 	}
 
@@ -516,8 +516,7 @@ export class Sync {
 
 			for (let entry of entries) {
 				if (entry[".tag"] == "failure") {
-					// TODO: Improve error messages
-					new Notice("Provider Sync Error", 0);
+					providerSyncError();
 					continue;
 				}
 
@@ -528,7 +527,7 @@ export class Sync {
 				}
 			}
 		} catch (e) {
-			new Notice(`Provider Sync Error: ${e}`);
+			providerSyncError(e);
 		}
 	}
 

@@ -5,6 +5,7 @@ import { SelectVaultModal } from "./select-vault-modal";
 import { getProvider, ProviderName } from "../providers/provider";
 import { Provider } from "src/providers/types";
 import { PubsubTopic } from "src/types";
+import { providerAuthError, providerSyncError } from "./notice";
 
 enum Status {
 	"CONNECTED",
@@ -51,10 +52,7 @@ export class SettingsTab extends PluginSettingTab {
 		});
 
 		pubsub.subscribe(PubsubTopic.AUTHORIZATION_FAILURE, () => {
-			new Notice(
-				`Provider Authorization Error: Unable to authorize ${this.providerName?.toUpperCase()}`,
-				0,
-			);
+			providerAuthError();
 			this.display();
 		});
 
@@ -73,7 +71,7 @@ export class SettingsTab extends PluginSettingTab {
 		pubsub.subscribe(
 			PubsubTopic.SYNC_ERROR,
 			(args: { payload: string }) => {
-				new Notice(args.payload, 0);
+				providerSyncError(args.payload);
 			},
 		);
 	}
