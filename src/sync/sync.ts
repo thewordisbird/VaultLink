@@ -60,6 +60,7 @@ export class Sync {
 		const clientFiles = clientFoldersOrFiles.filter(
 			(folderOrFile) => folderOrFile instanceof TFile,
 		) as TFile[];
+
 		const fileContents = await Promise.allSettled(
 			clientFiles.map((clientFile) =>
 				this.obsidianApp.vault.readBinary(clientFile),
@@ -73,11 +74,9 @@ export class Sync {
 			}
 
 			const fileHash = this.provider.createFileHash(
-				// @ts-ignore (tsserver bug - not type narroring)
+				// @ts-ignore (typesript bug - not type narroring)
 				{ fileData: fileContents[i].value },
 			);
-
-			console.log("File Hash:", fileHash);
 
 			const sanitizedRemotePath = sanitizeRemotePath({
 				vaultRoot: this.settings.cloudVaultPath!,
@@ -94,34 +93,49 @@ export class Sync {
 	}
 
 	public async syncClientFiles(): Promise<void> {
+		console.log("syncClientFiles");
 		if (!this.fileMap) {
 			throw new Error("Sync Error: fileMap not initialized");
 		}
 
-		for (const [_remotePath, fileData] of this.fileMap) {
+		const files: TFile[] = [];
+		for (let fileData of this.fileMap.values()) {
 			if (fileData.rev) continue;
 
 			const file = this.obsidianApp.vault.getFileByPath(fileData.path);
-			if (!file) return;
+			if (!file) continue;
 
-			const sanitizedRemotePath = sanitizeRemotePath({
-				vaultRoot: this.settings.cloudVaultPath,
-				filePath: file.path,
-			});
+			files.push(file);
+		}
 
-			this.obsidianApp.vault
-				.readBinary(file)
-				.then((contents) => {
-					this.provider.processBatchCreateFile([
-						{
-							path: sanitizedRemotePath,
-							contents,
-						},
-					]);
-				})
-				.catch((e) => {
-					providerSyncError(e);
-				});
+		const fileContents = await Promise.allSettled(
+			files.map((file) => this.obsidianApp.vault.readBinary(file)),
+		);
+
+		try {
+			await this.provider.processBatchCreateFile(
+				fileContents.reduce<{ path: string; contents: ArrayBuffer }[]>(
+					(acc, cur, idx) => {
+						if (cur.status == "rejected") {
+							obsidianFileRetrievalError(files[idx].name);
+						} else {
+							const sanitizedRemotePath = sanitizeRemotePath({
+								vaultRoot: this.settings.cloudVaultPath,
+								filePath: files[idx].path,
+							});
+							acc.push({
+								path: sanitizedRemotePath,
+								contents: cur.value,
+							});
+						}
+
+						return acc;
+					},
+					[],
+				),
+			);
+		} catch (e) {
+			providerSyncError(e);
 		}
 	}
 
