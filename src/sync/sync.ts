@@ -51,46 +51,54 @@ export class Sync {
 		this.provider = args.provider;
 	}
 
-	async initializeFileMap(): Promise<void> {
+	public async initializeFileMap(): Promise<void> {
 		//if (this.fileMap) return;
 		this.fileMap = new Map();
 
 		const clientFoldersOrFiles = this.obsidianApp.vault.getAllLoadedFiles();
 
-		for (let clientFolderOrFile of clientFoldersOrFiles) {
-			if (!(clientFolderOrFile instanceof TFile)) continue;
+		const clientFiles = clientFoldersOrFiles.filter(
+			(folderOrFile) => folderOrFile instanceof TFile,
+		) as TFile[];
+		const fileContents = await Promise.allSettled(
+			clientFiles.map((clientFile) =>
+				this.obsidianApp.vault.readBinary(clientFile),
+			),
+		);
 
-			let fileHash = this.provider.createFileHash({
-				fileData:
-					await this.obsidianApp.vault.readBinary(clientFolderOrFile),
-			});
+		for (let i = 0; i < clientFiles.length; i++) {
+			if (fileContents[i].status == "rejected") {
+				obsidianFileRetrievalError(clientFiles[i].name);
+				continue;
+			}
 
-			let sanitizedRemotePath = sanitizeRemotePath({
+			const fileHash = this.provider.createFileHash(
+				// @ts-ignore (tsserver bug - not type narroring)
+				{ fileData: fileContents[i].value },
+			);
+
+			console.log("File Hash:", fileHash);
+
+			const sanitizedRemotePath = sanitizeRemotePath({
 				vaultRoot: this.settings.cloudVaultPath!,
-				filePath: clientFolderOrFile.path,
+				filePath: clientFiles[i].path,
 			});
 
 			this.fileMap.set(sanitizedRemotePath, {
-				...clientFolderOrFile,
-				//clientPath: sanitizedClientPath,
+				...clientFiles[i],
 				remotePath: sanitizedRemotePath,
 				fileHash,
 				rev: undefined,
 			});
 		}
-
-		console.log("end - initializedFileMap:", this.fileMap);
 	}
 
-	async syncClientFiles(): Promise<void> {
-		// Any File that does NOT have a rev will be uploaded to the provider
-		// Run this after syncRemote
-		console.log("start - syncClientFiles:");
+	public async syncClientFiles(): Promise<void> {
 		if (!this.fileMap) {
 			throw new Error("Sync Error: fileMap not initialized");
 		}
 
-		for (const [remotePath, fileData] of this.fileMap) {
+		for (const [_remotePath, fileData] of this.fileMap) {
 			if (fileData.rev) continue;
 
 			const file = this.obsidianApp.vault.getFileByPath(fileData.path);
@@ -115,9 +123,8 @@ export class Sync {
 					providerSyncError(e);
 				});
 		}
-
-		console.log("end - syncClientFiles:");
 	}
+
 	async syncRemoteFiles(): Promise<void> {
 		if (!this.fileMap) {
 			throw new Error("Sync Error: fileMap not initialized");

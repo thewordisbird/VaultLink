@@ -5,6 +5,7 @@ import { PubSub } from "../../lib/pubsub";
 import { Sync } from "src/sync/sync";
 import type { PluginSettings } from "./settings";
 import { PubsubTopic } from "../types";
+import { providerSyncError } from "./notice";
 
 // TODO: Define this type - should not bring dropbox contents into this file
 const LONGPOLL_FREQUENCY = 30000;
@@ -101,8 +102,7 @@ export default class VaultLink extends Plugin {
 		/** PROVIDER SYNC **/
 		if (await dropboxProvider.getAuthorizationState()) {
 			/** STARTUP SYNC **/
-			fileSync.initializeFileMap();
-
+			await fileSync.initializeFileMap();
 			await fileSync.syncRemoteFiles();
 			/** END STARTUP SYNC **/
 
@@ -130,11 +130,10 @@ export default class VaultLink extends Plugin {
 			// This avoids running the on create callback on vault load
 			this.registerEvent(
 				this.app.vault.on("create", (folderOrFile) => {
-					console.log("create:", folderOrFile);
 					fileSync
 						.reconcileCreateFileOnClient({ folderOrFile })
 						.catch((e) => {
-							console.error("Create Event Error:", e);
+							providerSyncError(e);
 						});
 				}),
 			);
@@ -143,31 +142,31 @@ export default class VaultLink extends Plugin {
 		this.registerEvent(
 			// TODO: Extract function
 			this.app.vault.on("modify", (folderOrFile) => {
-				console.log("modify:", folderOrFile);
 				fileSync
 					.reconcileClientAhead({ clientFile: folderOrFile })
 					.catch((e) => {
-						console.error("Modify Event Error:", e);
+						providerSyncError(e);
 					});
 			}),
 		);
 
 		this.registerEvent(
 			this.app.vault.on("rename", (folderOrFile, ctx) => {
-				console.log("rename - start:", folderOrFile, ctx);
 				fileSync
 					.reconcileMoveFileOnClient({ folderOrFile, ctx })
 					.catch((e) => {
-						console.error("Rename Event Error:", e);
+						providerSyncError(e);
 					});
-				console.log("rename - end:");
 			}),
 		);
 
 		this.registerEvent(
 			this.app.vault.on("delete", (folderOrFile) => {
-				console.log("Delete\n", folderOrFile);
-				fileSync.reconcileDeletedOnClient({ folderOrFile });
+				fileSync
+					.reconcileDeletedOnClient({ folderOrFile })
+					.catch((e) => {
+						providerSyncError(e);
+					});
 			}),
 		);
 		/** END SYNC EVENT HANDLERS **/
