@@ -1,6 +1,6 @@
 import { Dropbox, DropboxAuth, DropboxResponse, files } from "dropbox";
 import { dropboxContentHasher } from "./dropbox.hasher";
-import { batch } from "src/utils";
+import { batchProcess, exponentialBackoff, RemoteFilePath } from "src/utils";
 import type { Folder } from "../types";
 import { Provider } from "./types";
 
@@ -202,6 +202,21 @@ export class DropboxProvider implements Provider {
 			});
 	}
 
+	public async longpoll(args: { cursor: string }) {
+		// Uses default `timeout` arg of 30 seconds
+		const longPollResult = await this.dropbox.filesListFolderLongpoll({
+			cursor: args.cursor,
+		});
+		if (!longPollResult.result.changes) {
+			return { cursor: args.cursor, files: [] };
+		}
+		// TODO: Refactor to include has_more
+		let remoteFiles = await this.listFilesContinue({
+			cursor: args.cursor,
+		});
+		return remoteFiles;
+	}
+
 	downloadFile(args: { path: string }): Promise<FileMetadataExtended> {
 		const { path } = args;
 		return this.dropbox.filesDownload({ path }).then((res) => res.result);
@@ -222,69 +237,139 @@ export class DropboxProvider implements Provider {
 	}
 
 	/* File and Folder Controls */
-	batchCreateFolder = batch<string, void>(
-		this._batchCreateFolder.bind(this),
-		BATCH_DELAY_TIME,
-	);
-
-	private _batchCreateFolder(paths: string[]) {
-		console.log("_batchDeleteFolderOrFile:", paths);
+	public processBatchCreateFolder(args: { paths: string[] }) {
 		return this.dropbox
-			.filesCreateFolderBatch({ paths })
+			.filesCreateFolderBatch({ paths: args.paths })
 			.then((res) => {
-				// This returns the results of the entry with a .tag property
-				// to say if the creation was successful or not.
-				// TODO: failed itmes should be dealt with
-				console.log("filesCreateFolderBatch Res:", res);
-			})
-			.catch((e: any) => {
-				console.error("Dropbox filesCreateFolderBatch Error:", e);
+				if (res.result[".tag"] == "complete") return res.result.entries;
+				else if (res.result[".tag"] == "async_job_id") {
+					return this.batchCreateFolderCheck({
+						asyncJobId: res.result.async_job_id,
+					}).then((res) => {
+						return res.result.entries;
+					});
+				} else {
+					throw new Error(
+						`Unknown ".tag" property: ${res.result[".tag"]}`,
+					);
+				}
 			});
 	}
 
-	batchRenameFolderOrFile = batch<
-		{ from_path: string; to_path: string },
-		Promise<void>
-	>(this._batchRenameFolderOrFile.bind(this), BATCH_DELAY_TIME);
+	private batchCreateFolderCheck = exponentialBackoff<
+		{ asyncJobId: string },
+		DropboxResponse<files.CreateFolderBatchJobStatus>,
+		DropboxResponse<files.CreateFolderBatchJobStatusComplete>
+	>({
+		func: this._batchCreateFolderCheck.bind(this),
+		checkFunc: this._batchCreateFolderCheckIsSuccess.bind(this),
+		interval: 250,
+		maxRetry: 10,
+		growthFactor: 2,
+	});
 
-	private _batchRenameFolderOrFile(
-		args: { from_path: string; to_path: string }[],
+	private _batchCreateFolderCheck(args: { asyncJobId: string }) {
+		return this.dropbox.filesCreateFolderBatchCheck({
+			async_job_id: args.asyncJobId,
+		});
+	}
+
+	private _batchCreateFolderCheckIsSuccess(
+		args: DropboxResponse<files.CreateFolderBatchJobStatus>,
 	) {
-		console.log("_batchRenameFolderOrFile:", args);
+		return args.result[".tag"] == "complete";
+	}
+
+	public processBatchRenameFolderOrFile(
+		args: { from_path: RemoteFilePath; to_path: RemoteFilePath }[],
+	) {
 		return this.dropbox
 			.filesMoveBatchV2({ entries: args })
-			.then((res) => {
-				console.log("filesCreateFolderBatch Res:", res);
-			})
-			.catch((e: any) => {
-				console.error("Dropbox filesCreateFolderBatch Error:", e);
+			.then(async (res) => {
+				if (res.result[".tag"] == "complete") return res.result.entries;
+				else if (res.result[".tag"] == "async_job_id") {
+					return this.batchRenameFolderOrFileCheck({
+						asyncJobId: res.result.async_job_id,
+					}).then((res) => {
+						return res.result.entries;
+					});
+				} else {
+					throw new Error(
+						`Unknown ".tag" property: ${res.result[".tag"]}`,
+					);
+				}
 			});
 	}
 
-	batchDeleteFolderOrFile = batch<string, Promise<void>>(
-		this._batchDeleteFolderOfFile.bind(this),
-		BATCH_DELAY_TIME,
-	);
+	private batchRenameFolderOrFileCheck = exponentialBackoff<
+		{ asyncJobId: string },
+		DropboxResponse<files.RelocationBatchV2JobStatus>,
+		DropboxResponse<files.RelocationBatchV2JobStatusComplete>
+	>({
+		func: this._batchRenameFolderOrFileCheck.bind(this),
+		checkFunc: this._batchRenameFolderOrFileCheckIsSuccess.bind(this),
+		interval: 250,
+		maxRetry: 10,
+		growthFactor: 2,
+	});
 
-	private _batchDeleteFolderOfFile(paths: string[]) {
-		console.log("_batchDeleteFolderOrFile:", paths);
-		this.dropbox
-			.filesDeleteBatch({ entries: paths.map((path) => ({ path })) })
-			.then((res) => {
-				console.log("filesDeleteBatch Res:", res);
-			})
-			.catch((e: any) => {
-				console.error("Dropbox filesDeleteBatch Error:", e);
+	private _batchRenameFolderOrFileCheck(args: { asyncJobId: string }) {
+		return this.dropbox.filesMoveBatchCheckV2({
+			async_job_id: args.asyncJobId,
+		});
+	}
+
+	private _batchRenameFolderOrFileCheckIsSuccess(
+		args: DropboxResponse<files.RelocationBatchV2JobStatus>,
+	) {
+		return args.result[".tag"] == "complete";
+	}
+
+	public processBatchDeleteFolderOfFile(args: { paths: string[] }) {
+		return this.dropbox
+			.filesDeleteBatch({ entries: args.paths.map((path) => ({ path })) })
+			.then(async (res) => {
+				if (res.result[".tag"] == "complete") return res.result.entries;
+				else if (res.result[".tag"] == "async_job_id") {
+					return this.batchDeleteFolderOrFileCheck({
+						asyncJobId: res.result.async_job_id,
+					}).then((res) => res.result.entries);
+				} else {
+					throw new Error(
+						`Unknown ".tag" property: ${res.result[".tag"]}`,
+					);
+				}
 			});
 	}
-	// TODO: Throttle is the wrong name for this. it should be batch or delay
-	batchCreateFile = batch<
-		{ path: string; contents: ArrayBuffer },
-		Promise<void>
-	>(this._createFile.bind(this), BATCH_DELAY_TIME);
 
-	async _createFile(args: { path: string; contents: ArrayBuffer }[]) {
-		console.log("_createFile args:", args);
+	private batchDeleteFolderOrFileCheck = exponentialBackoff<
+		{ asyncJobId: string },
+		DropboxResponse<files.DeleteBatchJobStatus>,
+		DropboxResponse<files.DeleteBatchJobStatusComplete>
+	>({
+		func: this._batchDeleteFolderOrFileCheck.bind(this),
+		checkFunc: this._batchDeleteFolderOrFileCheckIsSuccess.bind(this),
+		interval: 250,
+		maxRetry: 10,
+		growthFactor: 2,
+	});
+
+	private _batchDeleteFolderOrFileCheck(args: { asyncJobId: string }) {
+		return this.dropbox.filesDeleteBatchCheck({
+			async_job_id: args.asyncJobId,
+		});
+	}
+
+	private _batchDeleteFolderOrFileCheckIsSuccess(
+		args: DropboxResponse<files.RelocationBatchV2JobStatus>,
+	) {
+		return args.result[".tag"] == "complete";
+	}
+
+	public async processBatchCreateFile(
+		args: { path: string; contents: ArrayBuffer }[],
+	) {
+		console.log("_createFile start:", args);
 
 		const sessionIds = await this._batchCreateFileStart(args.length);
 		// If an error happens here, we still need to fire Finally to close the batch
@@ -301,9 +386,12 @@ export class DropboxProvider implements Provider {
 		if (rejected.length) {
 			console.log("REJECTED UPDATES:", rejected);
 		}
+
+		console.log("_createFile return:", finishResults);
+		return finishResults;
 	}
 
-	_batchCreateFileStart(numSessions: number) {
+	private _batchCreateFileStart(numSessions: number) {
 		return this.dropbox
 			.filesUploadSessionStartBatch({
 				num_sessions: numSessions,
@@ -311,7 +399,7 @@ export class DropboxProvider implements Provider {
 			.then((res) => res.result.session_ids);
 	}
 
-	_batchCreateFileAppend(args: {
+	private _batchCreateFileAppend(args: {
 		files: { path: string; contents: ArrayBuffer }[];
 		sessionIds: string[];
 	}) {
@@ -379,7 +467,8 @@ export class DropboxProvider implements Provider {
 			};
 		});
 	}
-	async _batchCreateFileFinish(
+
+	private async _batchCreateFileFinish(
 		entries: PromiseFulfilledResult<{
 			path: string;
 			cursor: { offset: number; session_id: string };
@@ -398,7 +487,11 @@ export class DropboxProvider implements Provider {
 		});
 	}
 
-	updateFile(args: { path: string; rev: string; contents: ArrayBuffer }) {
+	public updateFile(args: {
+		path: string;
+		rev: string;
+		contents: ArrayBuffer;
+	}) {
 		return this.dropbox
 			.filesUpload({
 				mode: {
@@ -413,40 +506,7 @@ export class DropboxProvider implements Provider {
 			});
 	}
 
-	async sync(path: string) {
-		// call listfolders and populate revMap
-		let res = await this.dropbox.filesListFolder({ path, recursive: true });
-		do {
-			for (let entry of res.result.entries) {
-				console.log(entry);
-			}
-			res = await this.dropbox.filesListFolderContinue({
-				cursor: res.result.cursor,
-			});
-		} while (res.result.has_more);
-	}
-
-	getFileMetadata(args: {
-		path: string;
-	}): Promise<files.FileMetadataReference> {
-		return this.dropbox
-			.filesGetMetadata({
-				path: args.path,
-			})
-			.then((res) => {
-				if (res.result[".tag"] != "file") {
-					throw new Error("Error: file metadata does not exist");
-				}
-				return res.result;
-			});
-	}
-
-	// DEPRECIATED
-	createDropboxContentHash(args: { fileData: ArrayBuffer }) {
-		return dropboxContentHasher(args.fileData);
-	}
-
-	createFileHash(args: { fileData: ArrayBuffer }) {
+	public createFileHash(args: { fileData: ArrayBuffer }) {
 		return dropboxContentHasher(args.fileData);
 	}
 }

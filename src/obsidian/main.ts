@@ -5,6 +5,7 @@ import { PubSub } from "../../lib/pubsub";
 import { Sync } from "src/sync/sync";
 import type { PluginSettings } from "./settings";
 import { PubsubTopic } from "../types";
+import { providerLongpollError, providerSyncError } from "./notice";
 
 // TODO: Define this type - should not bring dropbox contents into this file
 const LONGPOLL_FREQUENCY = 30000;
@@ -38,7 +39,6 @@ export default class VaultLink extends Plugin {
 			"connect-dropbox",
 			// TODO: Extract function
 			(protocolData) => {
-				// TODO: Handle error if no code is available
 				if (!protocolData.code) {
 					pubsub.publish(PubsubTopic.AUTHORIZATION_FAILURE);
 					return;
@@ -46,18 +46,15 @@ export default class VaultLink extends Plugin {
 
 				const codeVerifier =
 					window.sessionStorage.getItem("codeVerifier");
-				// TOOD: Handle error if no code verifier in sessionStorage
 				if (!codeVerifier) {
 					pubsub.publish(PubsubTopic.AUTHORIZATION_FAILURE);
 					return;
 				}
 
 				dropboxProvider.setCodeVerifier(codeVerifier);
-
 				dropboxProvider
 					.setAccessAndRefreshToken(protocolData.code)
 					.then(({ refreshToken }) => {
-						// Store Refresh token in local storage for persistant authorization
 						localStorage.setItem(
 							"dropboxRefreshToken",
 							refreshToken,
@@ -84,13 +81,27 @@ export default class VaultLink extends Plugin {
 				this.settings.cloudVaultPath = payload;
 				await this.saveSettings();
 
-				const clientFoldersOrFiles = this.app.vault.getAllLoadedFiles();
-
-				await fileSync.initializeFileMap({ clientFoldersOrFiles });
-				await fileSync.syncRemoteFiles();
-				await fileSync.syncClientFiles();
+				try {
+					await fileSync.initializeFileMap();
+					await fileSync.syncRemoteFiles();
+					await fileSync.syncClientFiles();
+				} catch (e) {
+					providerSyncError(e);
+				}
 			},
 		);
+
+		pubsub.subscribe(PubsubTopic.AUTHORIZATION_SUCCESS, async () => {
+			try {
+				await fileSync.initializeFileMap();
+				await fileSync.syncRemoteFiles();
+				await fileSync.syncClientFiles();
+				this.registerPluginIntervals(fileSync);
+				this.registerPluginEventHandlers(fileSync);
+			} catch (e) {
+				providerSyncError(e);
+			}
+		});
 
 		// TODO: Create new localStorage property: "provider" in addition to
 		//	property: "providerRefreshToken" for eventual scaling
@@ -104,47 +115,41 @@ export default class VaultLink extends Plugin {
 		}
 		/** END PROVIDER AUTHORIZATION **/
 
-		/** PROVIDER SYNC **/
+		/** STARTUP SYNC **/
 		if (await dropboxProvider.getAuthorizationState()) {
-			/** STARTUP SYNC **/
-			// build fileMap from the client files
-			console.log("Start Startup Sync");
-			const clientFoldersOrFiles = this.app.vault.getAllLoadedFiles();
-
-			fileSync.initializeFileMap({ clientFoldersOrFiles });
-
-			await fileSync.syncRemoteFiles();
-			/** END STARTUP SYNC **/
-
-			/** SETUP LONGPOLL **/
-			// TODO: Dependency inversion to not be specific to dropboxProvider
-			this.registerInterval(
-				window.setInterval(() => {
-					dropboxProvider.dropbox
-						.filesListFolderLongpoll({
-							cursor: fileSync.cursor!,
-						})
-						.then((res) => {
-							if (!res.result.changes) return;
-							return fileSync.syncRemoteFilesLongPoll({
-								cursor: fileSync.cursor!,
-							});
-						});
-				}, LONGPOLL_FREQUENCY),
-			);
+			try {
+				await fileSync.initializeFileMap();
+				await fileSync.syncRemoteFiles();
+				await fileSync.syncClientFiles();
+				this.registerPluginIntervals(fileSync);
+				this.registerPluginEventHandlers(fileSync);
+			} catch (e) {
+				providerSyncError(e);
+			}
 		}
-		/** END SETUP LONGPOLL **/
 
-		/** SYNC EVENT HANDLERS **/
+		// This adds a settings tab so the user can configure various aspects of the plugin
+		this.addSettingTab(settingsTab);
+	}
+
+	registerPluginIntervals(fileSync: Sync) {
+		this.registerInterval(
+			window.setInterval(() => {
+				fileSync.syncRemoteFilesLongPoll().catch((e) => {
+					providerLongpollError(e);
+				});
+			}, LONGPOLL_FREQUENCY),
+		);
+	}
+	registerPluginEventHandlers(fileSync: Sync) {
 		this.app.workspace.onLayoutReady(() => {
 			// This avoids running the on create callback on vault load
 			this.registerEvent(
 				this.app.vault.on("create", (folderOrFile) => {
-					console.log("create:", folderOrFile);
 					fileSync
 						.reconcileCreateFileOnClient({ folderOrFile })
 						.catch((e) => {
-							console.error("Create Event Error:", e);
+							providerSyncError(e);
 						});
 				}),
 			);
@@ -153,36 +158,33 @@ export default class VaultLink extends Plugin {
 		this.registerEvent(
 			// TODO: Extract function
 			this.app.vault.on("modify", (folderOrFile) => {
-				console.log("modify:", folderOrFile);
 				fileSync
 					.reconcileClientAhead({ clientFile: folderOrFile })
 					.catch((e) => {
-						console.error("Modify Event Error:", e);
+						providerSyncError(e);
 					});
 			}),
 		);
 
 		this.registerEvent(
 			this.app.vault.on("rename", (folderOrFile, ctx) => {
-				console.log("rename:", folderOrFile, ctx);
 				fileSync
 					.reconcileMoveFileOnClient({ folderOrFile, ctx })
 					.catch((e) => {
-						console.error("Rename Event Error:", e);
+						providerSyncError(e);
 					});
 			}),
 		);
 
 		this.registerEvent(
 			this.app.vault.on("delete", (folderOrFile) => {
-				console.log("Delete\n", folderOrFile);
-				fileSync.reconcileDeletedOnClient({ folderOrFile });
+				fileSync
+					.reconcileDeletedOnClient({ folderOrFile })
+					.catch((e) => {
+						providerSyncError(e);
+					});
 			}),
 		);
-		/** END SYNC EVENT HANDLERS **/
-
-		// This adds a settings tab so the user can configure various aspects of the plugin
-		this.addSettingTab(settingsTab);
 	}
 
 	onunload() {}

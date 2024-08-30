@@ -1,4 +1,5 @@
 import type { files, DropboxResponse } from "dropbox";
+import { RemoteFilePath } from "src/utils";
 import { FileMetadataExtended } from "./dropbox.provider";
 
 export interface Provider {
@@ -30,21 +31,32 @@ export interface Provider {
 	revokeAuthorizationToken(): Promise<void>;
 	getAuthenticationUrl(): Promise<String>;
 	getCodeVerifier(): string;
-	batchCreateFolder: {
-		(args: string): Promise<void>;
-		cancel: () => void;
-	};
+	processBatchRenameFolderOrFile(
+		args: {
+			from_path: RemoteFilePath;
+			to_path: RemoteFilePath;
+		}[],
+	): Promise<files.RelocationBatchResultEntry[]>;
 
-	batchCreateFile: {
-		(args: { path: string; contents: ArrayBuffer }): Promise<Promise<void>>;
-		cancel: () => void;
-	};
-	batchRenameFolderOrFile: {
-		(args: { from_path: string; to_path: string }): Promise<Promise<void>>;
-		cancel: () => void;
-	};
-	batchDeleteFolderOrFile: {
-		(args: string): Promise<Promise<void>>;
-		cancel: () => void;
-	};
+	processBatchCreateFile(
+		args: {
+			path: string;
+			contents: ArrayBuffer;
+		}[],
+	): Promise<DropboxResponse<files.UploadSessionFinishBatchResult>>;
+
+	processBatchCreateFolder(args: {
+		paths: string[];
+	}): Promise<files.CreateFolderBatchResultEntry[]>;
+	processBatchDeleteFolderOfFile(args: {
+		paths: string[];
+	}): Promise<files.DeleteBatchResultEntry[]>;
+	longpoll(args: { cursor: string }): Promise<{
+		files: (
+			| files.FileMetadataReference
+			| files.FolderMetadataReference
+			| files.DeletedMetadataReference
+		)[];
+		cursor: string;
+	}>;
 }

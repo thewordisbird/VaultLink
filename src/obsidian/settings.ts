@@ -5,6 +5,7 @@ import { SelectVaultModal } from "./select-vault-modal";
 import { getProvider, ProviderName } from "../providers/provider";
 import { Provider } from "src/providers/types";
 import { PubsubTopic } from "src/types";
+import { providerAuthError, providerSyncError } from "./notice";
 
 enum Status {
 	"CONNECTED",
@@ -51,22 +52,26 @@ export class SettingsTab extends PluginSettingTab {
 		});
 
 		pubsub.subscribe(PubsubTopic.AUTHORIZATION_FAILURE, () => {
-			new Notice(
-				`Provider Authorization Error: Unable to authorize ${this.providerName?.toUpperCase()}`,
-				0,
-			);
+			providerAuthError();
 			this.display();
 		});
 
 		pubsub.subscribe(
 			PubsubTopic.SET_VAULT_PATH,
-			async (args: { payload: string }) => {
+			(args: { payload: string }) => {
 				const { payload } = args;
 
 				const vaultPathInput = document.getElementById(
 					"vault_path_input",
 				) as HTMLInputElement;
 				vaultPathInput.value = payload;
+			},
+		);
+
+		pubsub.subscribe(
+			PubsubTopic.SYNC_ERROR,
+			(args: { payload: string }) => {
+				providerSyncError(args.payload);
 			},
 		);
 	}
