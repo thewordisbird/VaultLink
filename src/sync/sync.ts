@@ -39,7 +39,7 @@ export class Sync {
 	fileMap: Map<RemoteFilePath, FileSyncMetadata> | undefined;
 	obsidianApp: App;
 	settings: PluginSettings;
-	_cursor: string | null;
+	cursor: string | null;
 
 	constructor(args: {
 		obsidianApp: App;
@@ -241,7 +241,7 @@ export class Sync {
 		}
 	}
 
-	getSyncStatus(args: {
+	private getSyncStatus(args: {
 		clientFileMetadata: FileSyncMetadata | undefined;
 		remoteFileMetadata: RemoteFileData;
 	}): SyncStatus {
@@ -290,76 +290,64 @@ export class Sync {
 		}
 
 		if (args.folderOrFile instanceof TFolder) {
-			try {
-				const folders = await this.batchCreateFolder(
-					args.folderOrFile,
-				).then((folders) => {
-					return folders.map((folder) => {
-						const sanitizedRemotePath = sanitizeRemotePath({
-							vaultRoot: this.settings.cloudVaultPath,
-							filePath: folder.path,
-						});
-
-						return sanitizedRemotePath;
+			const folders = await this.batchCreateFolder(
+				args.folderOrFile,
+			).then((folders) => {
+				return folders.map((folder) => {
+					const sanitizedRemotePath = sanitizeRemotePath({
+						vaultRoot: this.settings.cloudVaultPath,
+						filePath: folder.path,
 					});
-				});
 
-				await this.provider.processBatchCreateFolder({
-					paths: folders,
+					return sanitizedRemotePath;
 				});
-			} catch (e) {
-				providerSyncError(e);
-			}
+			});
+
+			await this.provider.processBatchCreateFolder({
+				paths: folders,
+			});
 		}
 
 		if (args.folderOrFile instanceof TFile) {
-			try {
-				const files = await this.batchCreateFile(args.folderOrFile);
-				const binaryFileContents = await Promise.allSettled(
-					files.map((file) =>
-						this.obsidianApp.vault.readBinary(file),
-					),
-				);
+			const files = await this.batchCreateFile(args.folderOrFile);
+			const binaryFileContents = await Promise.allSettled(
+				files.map((file) => this.obsidianApp.vault.readBinary(file)),
+			);
 
-				const toProcess: {
-					path: RemoteFilePath;
-					contents: ArrayBuffer;
-				}[] = [];
-				for (let i = 0; i < files.length; i++) {
-					const bFileContents = binaryFileContents[i];
-					if (bFileContents.status == "rejected") {
-						obsidianFileRetrievalError(files[i].name);
-						continue;
-					}
-					const sanitizedRemotePath = sanitizeRemotePath({
-						vaultRoot: this.settings.cloudVaultPath,
-						filePath: files[i].path,
-					});
-					toProcess.push({
-						path: sanitizedRemotePath,
-						contents: bFileContents.value,
-					});
+			const toProcess: {
+				path: RemoteFilePath;
+				contents: ArrayBuffer;
+			}[] = [];
+			for (let i = 0; i < files.length; i++) {
+				const bFileContents = binaryFileContents[i];
+				if (bFileContents.status == "rejected") {
+					obsidianFileRetrievalError(files[i].name);
+					continue;
 				}
-
-				const entries =
-					await this.provider.processBatchCreateFile(toProcess);
-
-				for (let entry of entries.result.entries) {
-					// TODO: This shouldn't bee needed. improve typing on createFile
-					if (entry[".tag"] == "failure") continue;
-
-					this.fileMap.set(entry.path_lower as RemoteFilePath, {
-						...(args.folderOrFile as TFile),
-						remotePath: entry.path_lower as RemoteFilePath,
-						rev: entry.rev,
-						fileHash: entry.content_hash!,
-					});
-				}
-			} catch (e) {
-				providerSyncError(e);
+				const sanitizedRemotePath = sanitizeRemotePath({
+					vaultRoot: this.settings.cloudVaultPath,
+					filePath: files[i].path,
+				});
+				toProcess.push({
+					path: sanitizedRemotePath,
+					contents: bFileContents.value,
+				});
 			}
 
-			console.log("fileMap after create:", this.fileMap);
+			const entries =
+				await this.provider.processBatchCreateFile(toProcess);
+
+			for (let entry of entries.result.entries) {
+				// TODO: This shouldn't bee needed. improve typing on createFile
+				if (entry[".tag"] == "failure") continue;
+
+				this.fileMap.set(entry.path_lower as RemoteFilePath, {
+					...(args.folderOrFile as TFile),
+					remotePath: entry.path_lower as RemoteFilePath,
+					rev: entry.rev,
+					fileHash: entry.content_hash!,
+				});
+			}
 		}
 	}
 
@@ -374,83 +362,51 @@ export class Sync {
 			throw new Error("Sync Error: fileMap not initialized");
 		}
 
-		try {
-			const { results, items } = await this.batchRenameFolderOrFile(args);
+		const { results, items } = await this.batchRenameFolderOrFile(args);
 
-			const entries = await this.provider.processBatchRenameFolderOrFile(
-				results.map((result) => {
-					const fromPath = sanitizeRemotePath({
-						vaultRoot: this.settings.cloudVaultPath,
-						filePath: result.ctx,
-					});
-					const toPath = sanitizeRemotePath({
-						vaultRoot: this.settings.cloudVaultPath,
-						filePath: result.folderOrFile.path,
-					});
+		const entries = await this.provider.processBatchRenameFolderOrFile(
+			results.map((result) => {
+				const fromPath = sanitizeRemotePath({
+					vaultRoot: this.settings.cloudVaultPath,
+					filePath: result.ctx,
+				});
+				const toPath = sanitizeRemotePath({
+					vaultRoot: this.settings.cloudVaultPath,
+					filePath: result.folderOrFile.path,
+				});
 
-					return {
-						from_path: fromPath,
-						to_path: toPath,
-					};
-				}),
-			);
+				return {
+					from_path: fromPath,
+					to_path: toPath,
+				};
+			}),
+		);
 
-			for (let entry of entries) {
-				if (entry[".tag"] == "failure") {
-					providerSyncError();
-					continue;
-				}
+		for (let entry of entries) {
+			if (entry[".tag"] == "failure") {
+				providerSyncError();
+				continue;
+			}
 
-				if (entry[".tag"] == "success") {
-					if (entry.success[".tag"] === "folder") {
-						const entryName = entry.success.name;
+			if (entry[".tag"] == "success") {
+				if (entry.success[".tag"] === "folder") {
+					const entryName = entry.success.name;
 
-						const subFiles = items.filter((item) => {
-							return (
-								item.folderOrFile instanceof TFile &&
-								item.folderOrFile.parent?.name == entryName
-							);
-						});
-
-						subFiles.forEach((subFile) => {
-							const sanitizedFromPath = sanitizeRemotePath({
-								vaultRoot: this.settings.cloudVaultPath,
-								filePath: subFile.ctx,
-							});
-							const sanitizedToPath = sanitizeRemotePath({
-								vaultRoot: this.settings.cloudVaultPath,
-								filePath: subFile.folderOrFile.path,
-							});
-
-							const clientFileMetadata =
-								this.fileMap?.get(sanitizedFromPath);
-							if (clientFileMetadata)
-								this.fileMap?.delete(sanitizedFromPath);
-
-							this.fileMap?.set(sanitizedToPath, {
-								...(subFile.folderOrFile as TFile),
-								remotePath: sanitizedToPath,
-								rev: clientFileMetadata?.rev,
-								fileHash: clientFileMetadata?.fileHash,
-							});
-						});
-					}
-
-					if (entry.success[".tag"] == "file") {
-						const providerPath = entry.success.path_lower;
-						const clientFile = items.find(
-							(item) => item.folderOrFile.path == providerPath,
+					const subFiles = items.filter((item) => {
+						return (
+							item.folderOrFile instanceof TFile &&
+							item.folderOrFile.parent?.name == entryName
 						);
-						// TODO: This shouldn't be possible
-						if (!clientFile) continue;
+					});
 
+					subFiles.forEach((subFile) => {
 						const sanitizedFromPath = sanitizeRemotePath({
 							vaultRoot: this.settings.cloudVaultPath,
-							filePath: clientFile.ctx,
+							filePath: subFile.ctx,
 						});
 						const sanitizedToPath = sanitizeRemotePath({
 							vaultRoot: this.settings.cloudVaultPath,
-							filePath: clientFile.folderOrFile.path,
+							filePath: subFile.folderOrFile.path,
 						});
 
 						const clientFileMetadata =
@@ -459,25 +415,53 @@ export class Sync {
 							this.fileMap?.delete(sanitizedFromPath);
 
 						this.fileMap?.set(sanitizedToPath, {
-							...(clientFile.folderOrFile as TFile),
+							...(subFile.folderOrFile as TFile),
 							remotePath: sanitizedToPath,
 							rev: clientFileMetadata?.rev,
 							fileHash: clientFileMetadata?.fileHash,
 						});
-					}
+					});
+				}
+
+				if (entry.success[".tag"] == "file") {
+					const providerPath = entry.success.path_lower;
+					const clientFile = items.find(
+						(item) => item.folderOrFile.path == providerPath,
+					);
+					// TODO: This shouldn't be possible
+					if (!clientFile) continue;
+
+					const sanitizedFromPath = sanitizeRemotePath({
+						vaultRoot: this.settings.cloudVaultPath,
+						filePath: clientFile.ctx,
+					});
+					const sanitizedToPath = sanitizeRemotePath({
+						vaultRoot: this.settings.cloudVaultPath,
+						filePath: clientFile.folderOrFile.path,
+					});
+
+					const clientFileMetadata =
+						this.fileMap?.get(sanitizedFromPath);
+					if (clientFileMetadata)
+						this.fileMap?.delete(sanitizedFromPath);
+
+					this.fileMap?.set(sanitizedToPath, {
+						...(clientFile.folderOrFile as TFile),
+						remotePath: sanitizedToPath,
+						rev: clientFileMetadata?.rev,
+						fileHash: clientFileMetadata?.fileHash,
+					});
 				}
 			}
-		} catch (e) {
-			providerSyncError(e);
 		}
 	}
 
 	private batchRenameFolderOrFile = batch<{
 		folderOrFile: TAbstractFile;
 		ctx: string;
-	}>({ func: this.processBatchReanemFolderOrFileV2.bind(this), wait: 250 });
+	}>({ func: this._batchRenameFolderOrFile.bind(this), wait: 250 });
 
-	private processBatchReanemFolderOrFileV2(
+	private _batchRenameFolderOrFile(
 		args: { folderOrFile: TAbstractFile; ctx: string }[],
 	) {
 		const foldersToProcess = args.filter(
@@ -504,44 +488,38 @@ export class Sync {
 			throw new Error("Sync Error: fileMap not initialized");
 		}
 
-		try {
-			const deleted = await this.batchDeleteFolderOrFile(
-				args.folderOrFile,
-			);
+		const deleted = await this.batchDeleteFolderOrFile(args.folderOrFile);
 
-			const toProcess = deleted.map((folderOrFile) => {
-				const sanitizedPath = sanitizeRemotePath({
-					vaultRoot: this.settings.cloudVaultPath,
-					filePath: folderOrFile.path,
-				});
-
-				return sanitizedPath;
+		const toProcess = deleted.map((folderOrFile) => {
+			const sanitizedPath = sanitizeRemotePath({
+				vaultRoot: this.settings.cloudVaultPath,
+				filePath: folderOrFile.path,
 			});
 
-			const entries = await this.provider.processBatchDeleteFolderOfFile({
-				paths: toProcess,
-			});
+			return sanitizedPath;
+		});
 
-			for (let entry of entries) {
-				if (entry[".tag"] == "failure") {
-					providerSyncError();
-					continue;
-				}
+		const entries = await this.provider.processBatchDeleteFolderOfFile({
+			paths: toProcess,
+		});
 
-				if (entry[".tag"] == "success") {
-					this.fileMap.delete(
-						entry.metadata.path_lower as RemoteFilePath,
-					);
-				}
+		for (let entry of entries) {
+			if (entry[".tag"] == "failure") {
+				providerSyncError();
+				continue;
 			}
-		} catch (e) {
-			providerSyncError(e);
+
+			if (entry[".tag"] == "success") {
+				this.fileMap.delete(
+					entry.metadata.path_lower as RemoteFilePath,
+				);
+			}
 		}
 	}
 
 	private batchDeleteFolderOrFile = batch<TAbstractFile>({ wait: 250 });
 
-	async reconcileDeletedOnServer(args: {
+	private async reconcileDeletedOnServer(args: {
 		clientFileMetadata: FileSyncMetadata | undefined;
 		remoteFileMetadata: RemoteFileData;
 	}) {
@@ -572,8 +550,10 @@ export class Sync {
 		this.fileMap.delete(sanitizedRemotePath);
 	}
 
-	reconcileClientAhead(args: { clientFile: TAbstractFile }): Promise<void>;
-	reconcileClientAhead(args: {
+	public async reconcileClientAhead(args: {
+		clientFile: TAbstractFile;
+	}): Promise<void>;
+	public async reconcileClientAhead(args: {
 		clientFileMetadata: FileSyncMetadata;
 	}): Promise<void>;
 	async reconcileClientAhead(args: {
@@ -613,7 +593,9 @@ export class Sync {
 		clientFileMetadata.fileHash = res.result.content_hash!;
 	}
 
-	async reconcileRemoteAhead(args: { clientFileMetadata: FileSyncMetadata }) {
+	private async reconcileRemoteAhead(args: {
+		clientFileMetadata: FileSyncMetadata;
+	}) {
 		if (args.clientFileMetadata == undefined) return;
 
 		const clientFile = this.obsidianApp.vault.getFileByPath(
@@ -637,7 +619,9 @@ export class Sync {
 		args.clientFileMetadata.fileHash = remoteFileContents.content_hash!;
 	}
 
-	reconcileRemoteAheadFolder(args: { remoteFileMetadata: RemoteFileData }) {
+	private reconcileRemoteAheadFolder(args: {
+		remoteFileMetadata: RemoteFileData;
+	}) {
 		// TODO: sanitizedRemotePath should handle undefined path_lower
 		const sanitizedRemotePath = sanitizeRemotePath({
 			vaultRoot: this.settings.cloudVaultPath,
@@ -650,7 +634,7 @@ export class Sync {
 		return this.obsidianApp.vault.createFolder(sanitizedClientPath);
 	}
 
-	async reconcileClientNotFound(args: {
+	private async reconcileClientNotFound(args: {
 		remoteFileMetadata: RemoteFileData;
 	}) {
 		if (!this.fileMap) {
@@ -670,43 +654,18 @@ export class Sync {
 			remotePath: sanitizedRemotePath,
 		});
 
-		try {
-			const clientFileMetadata =
-				await this.obsidianApp.vault.createBinary(
-					sanitizedClientPath,
-					await remoteFileContents.fileBlob!.arrayBuffer(),
-					{
-						mtime: new Date(
-							remoteFileContents.server_modified,
-						).valueOf(),
-					},
-				);
-			this.fileMap.set(sanitizedRemotePath, {
-				...clientFileMetadata,
-				remotePath: sanitizedRemotePath,
-				fileHash: remoteFileContents.content_hash!,
-				rev: remoteFileContents.rev,
-			});
-		} catch (e) {
-			console.error("WHOOPS!", e);
-		}
-	}
-
-	public set cursor(cursor: string | null) {
-		this._cursor = cursor;
-		if (cursor) {
-			window.localStorage.setItem("cursor", cursor);
-		} else {
-			window.localStorage.removeItem("cursor");
-		}
-	}
-
-	public get cursor() {
-		if (this._cursor) {
-			return this._cursor;
-		}
-
-		this._cursor = window.localStorage.getItem("cursor");
-		return this._cursor;
+		const clientFileMetadata = await this.obsidianApp.vault.createBinary(
+			sanitizedClientPath,
+			await remoteFileContents.fileBlob!.arrayBuffer(),
+			{
+				mtime: new Date(remoteFileContents.server_modified).valueOf(),
+			},
+		);
+		this.fileMap.set(sanitizedRemotePath, {
+			...clientFileMetadata,
+			remotePath: sanitizedRemotePath,
+			fileHash: remoteFileContents.content_hash!,
+			rev: remoteFileContents.rev,
+		});
 	}
 }
