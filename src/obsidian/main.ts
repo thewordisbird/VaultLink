@@ -5,7 +5,7 @@ import { PubSub } from "../../lib/pubsub";
 import { Sync } from "src/sync/sync";
 import type { PluginSettings } from "./settings";
 import { PubsubTopic } from "../types";
-import { providerSyncError } from "./notice";
+import { providerLongpollError, providerSyncError } from "./notice";
 
 // TODO: Define this type - should not bring dropbox contents into this file
 const LONGPOLL_FREQUENCY = 30000;
@@ -81,9 +81,13 @@ export default class VaultLink extends Plugin {
 				this.settings.cloudVaultPath = payload;
 				await this.saveSettings();
 
-				await fileSync.initializeFileMap();
-				await fileSync.syncRemoteFiles();
-				await fileSync.syncClientFiles();
+				try {
+					await fileSync.initializeFileMap();
+					await fileSync.syncRemoteFiles();
+					await fileSync.syncClientFiles();
+				} catch (e) {
+					providerSyncError(e);
+				}
 			},
 		);
 
@@ -102,73 +106,72 @@ export default class VaultLink extends Plugin {
 		/** PROVIDER SYNC **/
 		if (await dropboxProvider.getAuthorizationState()) {
 			/** STARTUP SYNC **/
-			await fileSync.initializeFileMap();
-			await fileSync.syncRemoteFiles();
+			try {
+				await fileSync.initializeFileMap();
+				await fileSync.syncRemoteFiles();
+			} catch (e) {
+				providerSyncError(e);
+			}
 			/** END STARTUP SYNC **/
 
 			/** SETUP LONGPOLL **/
 			// TODO: Dependency inversion to not be specific to dropboxProvider
 			this.registerInterval(
-				window.setInterval(() => {
-					dropboxProvider.dropbox
-						.filesListFolderLongpoll({
-							cursor: fileSync.cursor!,
-						})
-						.then((res) => {
-							if (!res.result.changes) return;
-							return fileSync.syncRemoteFilesLongPoll({
-								cursor: fileSync.cursor!,
-							});
-						});
+				window.setInterval(async () => {
+					try {
+						await fileSync.syncRemoteFilesLongPoll();
+					} catch (e) {
+						providerLongpollError(e);
+					}
 				}, LONGPOLL_FREQUENCY),
 			);
-		}
-		/** END SETUP LONGPOLL **/
+			/** END SETUP LONGPOLL **/
 
-		/** SYNC EVENT HANDLERS **/
-		this.app.workspace.onLayoutReady(() => {
-			// This avoids running the on create callback on vault load
+			/** SYNC EVENT HANDLERS **/
+			this.app.workspace.onLayoutReady(() => {
+				// This avoids running the on create callback on vault load
+				this.registerEvent(
+					this.app.vault.on("create", (folderOrFile) => {
+						fileSync
+							.reconcileCreateFileOnClient({ folderOrFile })
+							.catch((e) => {
+								providerSyncError(e);
+							});
+					}),
+				);
+			});
+
 			this.registerEvent(
-				this.app.vault.on("create", (folderOrFile) => {
+				// TODO: Extract function
+				this.app.vault.on("modify", (folderOrFile) => {
 					fileSync
-						.reconcileCreateFileOnClient({ folderOrFile })
+						.reconcileClientAhead({ clientFile: folderOrFile })
 						.catch((e) => {
 							providerSyncError(e);
 						});
 				}),
 			);
-		});
 
-		this.registerEvent(
-			// TODO: Extract function
-			this.app.vault.on("modify", (folderOrFile) => {
-				fileSync
-					.reconcileClientAhead({ clientFile: folderOrFile })
-					.catch((e) => {
-						providerSyncError(e);
-					});
-			}),
-		);
+			this.registerEvent(
+				this.app.vault.on("rename", (folderOrFile, ctx) => {
+					fileSync
+						.reconcileMoveFileOnClient({ folderOrFile, ctx })
+						.catch((e) => {
+							providerSyncError(e);
+						});
+				}),
+			);
 
-		this.registerEvent(
-			this.app.vault.on("rename", (folderOrFile, ctx) => {
-				fileSync
-					.reconcileMoveFileOnClient({ folderOrFile, ctx })
-					.catch((e) => {
-						providerSyncError(e);
-					});
-			}),
-		);
-
-		this.registerEvent(
-			this.app.vault.on("delete", (folderOrFile) => {
-				fileSync
-					.reconcileDeletedOnClient({ folderOrFile })
-					.catch((e) => {
-						providerSyncError(e);
-					});
-			}),
-		);
+			this.registerEvent(
+				this.app.vault.on("delete", (folderOrFile) => {
+					fileSync
+						.reconcileDeletedOnClient({ folderOrFile })
+						.catch((e) => {
+							providerSyncError(e);
+						});
+				}),
+			);
+		}
 		/** END SYNC EVENT HANDLERS **/
 
 		// This adds a settings tab so the user can configure various aspects of the plugin

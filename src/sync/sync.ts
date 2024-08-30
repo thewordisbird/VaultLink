@@ -93,7 +93,6 @@ export class Sync {
 	}
 
 	public async syncClientFiles(): Promise<void> {
-		console.log("syncClientFiles");
 		if (!this.fileMap) {
 			throw new Error("Sync Error: fileMap not initialized");
 		}
@@ -112,34 +111,29 @@ export class Sync {
 			files.map((file) => this.obsidianApp.vault.readBinary(file)),
 		);
 
-		try {
-			await this.provider.processBatchCreateFile(
-				fileContents.reduce<{ path: string; contents: ArrayBuffer }[]>(
-					(acc, cur, idx) => {
-						if (cur.status == "rejected") {
-							obsidianFileRetrievalError(files[idx].name);
-						} else {
-							const sanitizedRemotePath = sanitizeRemotePath({
-								vaultRoot: this.settings.cloudVaultPath,
-								filePath: files[idx].path,
-							});
-							acc.push({
-								path: sanitizedRemotePath,
-								contents: cur.value,
-							});
-						}
-
-						return acc;
-					},
-					[],
-				),
-			);
-		} catch (e) {
-			providerSyncError(e);
-		}
+		await this.provider.processBatchCreateFile(
+			fileContents.reduce<{ path: string; contents: ArrayBuffer }[]>(
+				(acc, cur, idx) => {
+					if (cur.status == "rejected") {
+						obsidianFileRetrievalError(files[idx].name);
+					} else {
+						const sanitizedRemotePath = sanitizeRemotePath({
+							vaultRoot: this.settings.cloudVaultPath,
+							filePath: files[idx].path,
+						});
+						acc.push({
+							path: sanitizedRemotePath,
+							contents: cur.value,
+						});
+					}
+					return acc;
+				},
+				[],
+			),
+		);
 	}
 
-	async syncRemoteFiles(): Promise<void> {
+	public async syncRemoteFiles(): Promise<void> {
 		if (!this.fileMap) {
 			throw new Error("Sync Error: fileMap not initialized");
 		}
@@ -151,32 +145,29 @@ export class Sync {
 			vaultRoot: "/" + this.settings.cloudVaultPath,
 		});
 
-		this.syncFiles({ remoteFiles });
-		// Check for changes that occured while not using the app
-		if (this.cursor) {
-			await this.syncRemoteFilesLongPoll({ cursor: this.cursor });
+		try {
+			await this.syncFiles({ remoteFiles });
+			this.cursor = remoteFiles.cursor;
+		} catch (e) {
+			providerSyncError(e);
 		}
-
-		this.cursor = remoteFiles.cursor;
 	}
 
-	async syncRemoteFilesLongPoll(args: { cursor: string }): Promise<void> {
+	public async syncRemoteFilesLongPoll(): Promise<void> {
 		if (!this.fileMap) {
 			throw new Error("Sync Error: fileMap not initialized");
 		}
+		if (!this.cursor) return;
 
-		// TODO: Refactor to include has_more
-		let remoteFiles = await this.provider.listFilesContinue({
-			cursor: args.cursor,
+		const remoteFiles = await this.provider.longpoll({
+			cursor: this.cursor,
 		});
 
-		await this.syncFiles({ remoteFiles }).catch((e) => {
-			console.error("SyncFiles LP Error", e);
-		});
+		await this.syncFiles({ remoteFiles });
 		this.cursor = remoteFiles.cursor;
 	}
 
-	async syncFiles(args: {
+	private syncFiles(args: {
 		remoteFiles: {
 			files: (
 				| files.FileMetadataReference
@@ -185,35 +176,27 @@ export class Sync {
 			)[];
 			cursor: string;
 		};
-	}) {
+	}): Promise<PromiseSettledResult<void>[]> {
 		if (!this.fileMap) {
 			throw new Error("Sync Error: fileMap not initialized");
 		}
-		const toSync = [];
-		for (let remoteFileMetadata of args.remoteFiles.files) {
-			/* This taggins system is specific to dropbox. As additional Providers are added a plugin tagging system should be implemented. */
-			// if (remoteFileMetadata[".tag"] != "file") continue;
-
-			let sanitizedRemotePath = sanitizeRemotePath({
-				filePath: remoteFileMetadata.path_lower!,
-			});
-			let clientFileMetadata = this.fileMap.get(sanitizedRemotePath);
-
-			toSync.push(
-				this.syncFile({
-					clientFileMetadata,
-					remoteFileMetadata,
-				}),
-			);
-		}
-
-		await Promise.allSettled(toSync);
+		return Promise.allSettled(
+			args.remoteFiles.files.map((file) => {
+				const sanitizedRemotePath = sanitizeRemotePath({
+					filePath: file.path_lower!,
+				});
+				return this.syncFile({
+					clientFileMetadata: this.fileMap?.get(sanitizedRemotePath),
+					remoteFileMetadata: file,
+				});
+			}),
+		);
 	}
 
-	async syncFile(args: {
+	private async syncFile(args: {
 		clientFileMetadata: FileSyncMetadata | undefined;
 		remoteFileMetadata: RemoteFileData;
-	}) {
+	}): Promise<void> {
 		let syncStatus = this.getSyncStatus({
 			clientFileMetadata: args.clientFileMetadata,
 			remoteFileMetadata: args.remoteFileMetadata,
@@ -251,6 +234,8 @@ export class Sync {
 					remoteFileMetadata: args.remoteFileMetadata,
 				});
 				break;
+			default:
+				throw new Error(`Invalid Sync Status: ${syncStatus}`);
 		}
 	}
 

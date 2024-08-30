@@ -202,6 +202,21 @@ export class DropboxProvider implements Provider {
 			});
 	}
 
+	public async longpoll(args: { cursor: string }) {
+		// Uses default `timeout` arg of 30 seconds
+		const longPollResult = await this.dropbox.filesListFolderLongpoll({
+			cursor: args.cursor,
+		});
+		if (!longPollResult.result.changes) {
+			return { cursor: args.cursor, files: [] };
+		}
+		// TODO: Refactor to include has_more
+		let remoteFiles = await this.listFilesContinue({
+			cursor: args.cursor,
+		});
+		return remoteFiles;
+	}
+
 	downloadFile(args: { path: string }): Promise<FileMetadataExtended> {
 		const { path } = args;
 		return this.dropbox.filesDownload({ path }).then((res) => res.result);

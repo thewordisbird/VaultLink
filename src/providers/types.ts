@@ -51,4 +51,12 @@ export interface Provider {
 	processBatchDeleteFolderOfFile(args: {
 		paths: string[];
 	}): Promise<files.DeleteBatchResultEntry[]>;
+	longpoll(args: { cursor: string }): Promise<{
+		files: (
+			| files.FileMetadataReference
+			| files.FolderMetadataReference
+			| files.DeletedMetadataReference
+		)[];
+		cursor: string;
+	}>;
 }
