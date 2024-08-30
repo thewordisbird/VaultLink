@@ -111,6 +111,8 @@ export class Sync {
 			files.map((file) => this.obsidianApp.vault.readBinary(file)),
 		);
 
+		if (!files.length) return;
+
 		await this.provider.processBatchCreateFile(
 			fileContents.reduce<{ path: string; contents: ArrayBuffer }[]>(
 				(acc, cur, idx) => {

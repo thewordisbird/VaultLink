@@ -91,6 +91,18 @@ export default class VaultLink extends Plugin {
 			},
 		);
 
+		pubsub.subscribe(PubsubTopic.AUTHORIZATION_SUCCESS, async () => {
+			try {
+				await fileSync.initializeFileMap();
+				await fileSync.syncRemoteFiles();
+				await fileSync.syncClientFiles();
+				this.registerPluginIntervals(fileSync);
+				this.registerPluginEventHandlers(fileSync);
+			} catch (e) {
+				providerSyncError(e);
+			}
+		});
+
 		// TODO: Create new localStorage property: "provider" in addition to
 		//	property: "providerRefreshToken" for eventual scaling
 		const refreshToken = localStorage.getItem("dropboxRefreshToken");
@@ -103,77 +115,76 @@ export default class VaultLink extends Plugin {
 		}
 		/** END PROVIDER AUTHORIZATION **/
 
-		/** PROVIDER SYNC **/
+		/** STARTUP SYNC **/
 		if (await dropboxProvider.getAuthorizationState()) {
-			/** STARTUP SYNC **/
 			try {
 				await fileSync.initializeFileMap();
 				await fileSync.syncRemoteFiles();
+				await fileSync.syncClientFiles();
+				this.registerPluginIntervals(fileSync);
+				this.registerPluginEventHandlers(fileSync);
 			} catch (e) {
 				providerSyncError(e);
 			}
-			/** END STARTUP SYNC **/
-
-			/** SETUP LONGPOLL **/
-			// TODO: Dependency inversion to not be specific to dropboxProvider
-			this.registerInterval(
-				window.setInterval(() => {
-					fileSync.syncRemoteFilesLongPoll().catch((e) => {
-						providerLongpollError(e);
-					});
-				}, LONGPOLL_FREQUENCY),
-			);
-			/** END SETUP LONGPOLL **/
-
-			/** SYNC EVENT HANDLERS **/
-			this.app.workspace.onLayoutReady(() => {
-				// This avoids running the on create callback on vault load
-				this.registerEvent(
-					this.app.vault.on("create", (folderOrFile) => {
-						fileSync
-							.reconcileCreateFileOnClient({ folderOrFile })
-							.catch((e) => {
-								providerSyncError(e);
-							});
-					}),
-				);
-			});
-
-			this.registerEvent(
-				// TODO: Extract function
-				this.app.vault.on("modify", (folderOrFile) => {
-					fileSync
-						.reconcileClientAhead({ clientFile: folderOrFile })
-						.catch((e) => {
-							providerSyncError(e);
-						});
-				}),
-			);
-
-			this.registerEvent(
-				this.app.vault.on("rename", (folderOrFile, ctx) => {
-					fileSync
-						.reconcileMoveFileOnClient({ folderOrFile, ctx })
-						.catch((e) => {
-							providerSyncError(e);
-						});
-				}),
-			);
-
-			this.registerEvent(
-				this.app.vault.on("delete", (folderOrFile) => {
-					fileSync
-						.reconcileDeletedOnClient({ folderOrFile })
-						.catch((e) => {
-							providerSyncError(e);
-						});
-				}),
-			);
 		}
-		/** END SYNC EVENT HANDLERS **/
 
 		// This adds a settings tab so the user can configure various aspects of the plugin
 		this.addSettingTab(settingsTab);
+	}
+
+	registerPluginIntervals(fileSync: Sync) {
+		this.registerInterval(
+			window.setInterval(() => {
+				fileSync.syncRemoteFilesLongPoll().catch((e) => {
+					providerLongpollError(e);
+				});
+			}, LONGPOLL_FREQUENCY),
+		);
+	}
+	registerPluginEventHandlers(fileSync: Sync) {
+		this.app.workspace.onLayoutReady(() => {
+			// This avoids running the on create callback on vault load
+			this.registerEvent(
+				this.app.vault.on("create", (folderOrFile) => {
+					fileSync
+						.reconcileCreateFileOnClient({ folderOrFile })
+						.catch((e) => {
+							providerSyncError(e);
+						});
+				}),
+			);
+		});
+
+		this.registerEvent(
+			// TODO: Extract function
+			this.app.vault.on("modify", (folderOrFile) => {
+				fileSync
+					.reconcileClientAhead({ clientFile: folderOrFile })
+					.catch((e) => {
+						providerSyncError(e);
+					});
+			}),
+		);
+
+		this.registerEvent(
+			this.app.vault.on("rename", (folderOrFile, ctx) => {
+				fileSync
+					.reconcileMoveFileOnClient({ folderOrFile, ctx })
+					.catch((e) => {
+						providerSyncError(e);
+					});
+			}),
+		);
+
+		this.registerEvent(
+			this.app.vault.on("delete", (folderOrFile) => {
+				fileSync
+					.reconcileDeletedOnClient({ folderOrFile })
+					.catch((e) => {
+						providerSyncError(e);
+					});
+			}),
+		);
 	}
 
 	onunload() {}
