@@ -117,12 +117,10 @@ export default class VaultLink extends Plugin {
 			/** SETUP LONGPOLL **/
 			// TODO: Dependency inversion to not be specific to dropboxProvider
 			this.registerInterval(
-				window.setInterval(async () => {
-					try {
-						await fileSync.syncRemoteFilesLongPoll();
-					} catch (e) {
+				window.setInterval(() => {
+					fileSync.syncRemoteFilesLongPoll().catch((e) => {
 						providerLongpollError(e);
-					}
+					});
 				}, LONGPOLL_FREQUENCY),
 			);
 			/** END SETUP LONGPOLL **/
