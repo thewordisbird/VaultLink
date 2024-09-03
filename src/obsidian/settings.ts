@@ -26,6 +26,8 @@ export class SettingsTab extends PluginSettingTab {
 	private plugin: VaultLink;
 	private status: Status;
 	private providerName: ProviderName | undefined;
+	private pubsub: PubSub;
+
 	// TODO: Can this be typed as the general Provider that all provider
 	// instances will satisfy?
 	private provider: Provider | undefined;
@@ -42,8 +44,8 @@ export class SettingsTab extends PluginSettingTab {
 		this.provider = getProvider({ providerName: this.providerName });
 
 		// Register pubsub subscriptions
-		const pubsub = new PubSub();
-		pubsub.subscribe(PubsubTopic.AUTHORIZATION_SUCCESS, () => {
+		this.pubsub = new PubSub();
+		this.pubsub.subscribe(PubsubTopic.AUTHORIZATION_SUCCESS, () => {
 			this.status = Status.CONNECTED;
 			this.plugin.settings.providerName = "dropbox" as ProviderName;
 			this.providerName = "dropbox" as ProviderName;
@@ -51,12 +53,12 @@ export class SettingsTab extends PluginSettingTab {
 			this.display();
 		});
 
-		pubsub.subscribe(PubsubTopic.AUTHORIZATION_FAILURE, () => {
+		this.pubsub.subscribe(PubsubTopic.AUTHORIZATION_FAILURE, () => {
 			providerAuthError();
 			this.display();
 		});
 
-		pubsub.subscribe(
+		this.pubsub.subscribe(
 			PubsubTopic.SET_VAULT_PATH,
 			(args: { payload: string }) => {
 				const { payload } = args;
@@ -68,7 +70,7 @@ export class SettingsTab extends PluginSettingTab {
 			},
 		);
 
-		pubsub.subscribe(
+		this.pubsub.subscribe(
 			PubsubTopic.SYNC_ERROR,
 			(args: { payload: string }) => {
 				providerSyncError(args.payload);
@@ -164,6 +166,9 @@ export class SettingsTab extends PluginSettingTab {
 					this.provider.revokeAuthorizationToken().then(() => {
 						localStorage.removeItem("dropboxRefreshToken");
 						this.status = Status.DISCONNECTED;
+						this.pubsub.publish(
+							PubsubTopic.AUTHORIZATION_DISCONNECT,
+						);
 						this.display();
 					});
 				});

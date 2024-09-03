@@ -1,4 +1,4 @@
-import { Plugin } from "obsidian";
+import { EventRef, Plugin, TAbstractFile } from "obsidian";
 import { DEFAULT_SETTINGS, SettingsTab } from "./settings";
 import { DropboxProvider } from ".././providers/dropbox.provider";
 import { PubSub } from "../../lib/pubsub";
@@ -11,7 +11,15 @@ import { providerLongpollError, providerSyncError } from "./notice";
 const LONGPOLL_FREQUENCY = 30000;
 
 export default class VaultLink extends Plugin {
-	settings: PluginSettings;
+	private fileSync: Sync;
+	public settings: PluginSettings;
+
+	private longpollIntervalId: number | undefined;
+
+	private handleCreateEventRef: EventRef | undefined;
+	private handleModifyEventRef: EventRef | undefined;
+	private handleRenameEventRef: EventRef | undefined;
+	private handleDeleteEventRef: EventRef | undefined;
 
 	async onload() {
 		await this.loadSettings();
@@ -26,7 +34,7 @@ export default class VaultLink extends Plugin {
 		// and then be seta as a more general name - provider
 		const dropboxProvider = new DropboxProvider();
 
-		const fileSync = new Sync({
+		this.fileSync = new Sync({
 			obsidianApp: this.app,
 			settings: this.settings,
 			provider: dropboxProvider,
@@ -82,9 +90,9 @@ export default class VaultLink extends Plugin {
 				await this.saveSettings();
 
 				try {
-					await fileSync.initializeFileMap();
-					await fileSync.syncRemoteFiles();
-					await fileSync.syncClientFiles();
+					await this.fileSync.initializeFileMap();
+					await this.fileSync.syncRemoteFiles();
+					await this.fileSync.syncClientFiles();
 				} catch (e) {
 					providerSyncError(e);
 				}
@@ -92,15 +100,27 @@ export default class VaultLink extends Plugin {
 		);
 
 		pubsub.subscribe(PubsubTopic.AUTHORIZATION_SUCCESS, async () => {
+			//TODO: Cloudvault setting should be reset on login. Once that happend
+			//need to check if there is a valut setup.
 			try {
-				await fileSync.initializeFileMap();
-				await fileSync.syncRemoteFiles();
-				await fileSync.syncClientFiles();
-				this.registerPluginIntervals(fileSync);
-				this.registerPluginEventHandlers(fileSync);
+				await this.fileSync.initializeFileMap();
+				await this.fileSync.syncRemoteFiles();
+				await this.fileSync.syncClientFiles();
+				this.registerPluginIntervals();
+				this.registerPluginEventHandlers();
 			} catch (e) {
 				providerSyncError(e);
 			}
+		});
+
+		pubsub.subscribe(PubsubTopic.AUTHORIZATION_FAILURE, () => {
+			this.clearPluginIntervals();
+			this.clearPluginEventHandlers();
+		});
+
+		pubsub.subscribe(PubsubTopic.AUTHORIZATION_DISCONNECT, () => {
+			this.clearPluginIntervals();
+			this.clearPluginEventHandlers();
 		});
 
 		// TODO: Create new localStorage property: "provider" in addition to
@@ -109,82 +129,106 @@ export default class VaultLink extends Plugin {
 
 		// Automatically authenticate from refresh token
 		if (refreshToken) {
-			dropboxProvider.authorizeWithRefreshToken(refreshToken);
-			dropboxProvider.setUserInfo();
-			pubsub.publish(PubsubTopic.AUTHORIZATION_SUCCESS);
-		}
-		/** END PROVIDER AUTHORIZATION **/
-
-		/** STARTUP SYNC **/
-		if (await dropboxProvider.getAuthorizationState()) {
 			try {
-				await fileSync.initializeFileMap();
-				await fileSync.syncRemoteFiles();
-				await fileSync.syncClientFiles();
-				this.registerPluginIntervals(fileSync);
-				this.registerPluginEventHandlers(fileSync);
+				dropboxProvider.authorizeWithRefreshToken(refreshToken);
+				await dropboxProvider.setUserInfo();
+				pubsub.publish(PubsubTopic.AUTHORIZATION_SUCCESS);
 			} catch (e) {
-				providerSyncError(e);
+				pubsub.publish(PubsubTopic.AUTHORIZATION_FAILURE);
 			}
 		}
 
-		// This adds a settings tab so the user can configure various aspects of the plugin
+		// Add Settings Tab For Plugin
 		this.addSettingTab(settingsTab);
 	}
 
-	registerPluginIntervals(fileSync: Sync) {
-		this.registerInterval(
-			window.setInterval(() => {
-				fileSync.syncRemoteFilesLongPoll().catch((e) => {
-					providerLongpollError(e);
-				});
-			}, LONGPOLL_FREQUENCY),
-		);
+	registerPluginIntervals() {
+		this.longpollIntervalId = window.setInterval(() => {
+			this.fileSync.syncRemoteFilesLongPoll().catch((e) => {
+				providerLongpollError(e);
+			});
+		}, LONGPOLL_FREQUENCY);
+		this.registerInterval(this.longpollIntervalId);
 	}
-	registerPluginEventHandlers(fileSync: Sync) {
+
+	clearPluginIntervals() {
+		window.clearInterval(this.longpollIntervalId);
+		this.longpollIntervalId = undefined;
+	}
+
+	registerPluginEventHandlers() {
+		// This avoids running the on create callback on vault load
 		this.app.workspace.onLayoutReady(() => {
-			// This avoids running the on create callback on vault load
-			this.registerEvent(
-				this.app.vault.on("create", (folderOrFile) => {
-					fileSync
+			this.handleCreateEventRef = this.app.vault.on(
+				"create",
+				(folderOrFile: TAbstractFile) => {
+					this.fileSync
 						.reconcileCreateFileOnClient({ folderOrFile })
 						.catch((e) => {
 							providerSyncError(e);
 						});
-				}),
+				},
 			);
+			this.registerEvent(this.handleCreateEventRef);
 		});
 
-		this.registerEvent(
-			// TODO: Extract function
-			this.app.vault.on("modify", (folderOrFile) => {
-				fileSync
+		this.handleModifyEventRef = this.app.vault.on(
+			"modify",
+			(folderOrFile: TAbstractFile) => {
+				this.fileSync
 					.reconcileClientAhead({ clientFile: folderOrFile })
 					.catch((e) => {
 						providerSyncError(e);
 					});
-			}),
+			},
 		);
+		this.registerEvent(this.handleModifyEventRef);
 
-		this.registerEvent(
-			this.app.vault.on("rename", (folderOrFile, ctx) => {
-				fileSync
+		this.handleRenameEventRef = this.app.vault.on(
+			"rename",
+			(folderOrFile: TAbstractFile, ctx: string) => {
+				this.fileSync
 					.reconcileMoveFileOnClient({ folderOrFile, ctx })
 					.catch((e) => {
 						providerSyncError(e);
 					});
-			}),
+			},
 		);
+		this.registerEvent(this.handleRenameEventRef);
 
-		this.registerEvent(
-			this.app.vault.on("delete", (folderOrFile) => {
-				fileSync
+		this.handleDeleteEventRef = this.app.vault.on(
+			"delete",
+			(folderOrFile: TAbstractFile) => {
+				this.fileSync
 					.reconcileDeletedOnClient({ folderOrFile })
 					.catch((e) => {
 						providerSyncError(e);
 					});
-			}),
+			},
 		);
+		this.registerEvent(this.handleDeleteEventRef);
+	}
+
+	clearPluginEventHandlers() {
+		if (this.handleCreateEventRef) {
+			this.app.vault.offref(this.handleCreateEventRef);
+			this.handleCreateEventRef = undefined;
+		}
+
+		if (this.handleModifyEventRef) {
+			this.app.vault.offref(this.handleModifyEventRef);
+			this.handleModifyEventRef = undefined;
+		}
+
+		if (this.handleRenameEventRef) {
+			this.app.vault.offref(this.handleRenameEventRef);
+			this.handleRenameEventRef = undefined;
+		}
+
+		if (this.handleDeleteEventRef) {
+			this.app.vault.offref(this.handleDeleteEventRef);
+			this.handleDeleteEventRef = undefined;
+		}
 	}
 
 	onunload() {}
