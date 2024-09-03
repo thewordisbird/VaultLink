@@ -88,6 +88,7 @@ export default class VaultLink extends Plugin {
 
 				this.settings.cloudVaultPath = payload;
 				await this.saveSettings();
+				if (!this.settings.cloudVaultPath) return;
 
 				try {
 					await this.fileSync.initializeFileMap();
@@ -102,6 +103,7 @@ export default class VaultLink extends Plugin {
 		pubsub.subscribe(PubsubTopic.AUTHORIZATION_SUCCESS, async () => {
 			//TODO: Cloudvault setting should be reset on login. Once that happend
 			//need to check if there is a valut setup.
+			if (!this.settings.cloudVaultPath) return;
 			try {
 				await this.fileSync.initializeFileMap();
 				await this.fileSync.syncRemoteFiles();

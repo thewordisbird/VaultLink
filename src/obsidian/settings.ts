@@ -58,6 +58,14 @@ export class SettingsTab extends PluginSettingTab {
 			this.display();
 		});
 
+		this.pubsub.subscribe(PubsubTopic.AUTHORIZATION_DISCONNECT, () => {
+			localStorage.removeItem("dropboxRefreshToken");
+			this.status = Status.DISCONNECTED;
+			this.plugin.settings.providerName = undefined;
+			this.plugin.settings.cloudVaultPath = undefined;
+			this.display();
+		});
+
 		this.pubsub.subscribe(
 			PubsubTopic.SET_VAULT_PATH,
 			(args: { payload: string }) => {
@@ -164,12 +172,9 @@ export class SettingsTab extends PluginSettingTab {
 					if (!this.provider) return;
 
 					this.provider.revokeAuthorizationToken().then(() => {
-						localStorage.removeItem("dropboxRefreshToken");
-						this.status = Status.DISCONNECTED;
 						this.pubsub.publish(
 							PubsubTopic.AUTHORIZATION_DISCONNECT,
 						);
-						this.display();
 					});
 				});
 			});
