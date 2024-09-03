@@ -489,15 +489,23 @@ export class DropboxProvider implements Provider {
 
 	public updateFile(args: {
 		path: string;
-		rev: string;
+		rev: string | undefined;
 		contents: ArrayBuffer;
 	}) {
+		let mode: files.WriteModeUpdate | files.WriteModeOverwrite;
+		if (args.rev) {
+			mode = {
+				".tag": "update",
+				update: args.rev,
+			};
+		} else {
+			mode = {
+				".tag": "overwrite",
+			};
+		}
 		return this.dropbox
 			.filesUpload({
-				mode: {
-					".tag": "update",
-					update: args.rev,
-				},
+				mode,
 				path: args.path,
 				contents: new Blob([args.contents]),
 			})

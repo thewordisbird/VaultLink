@@ -24,7 +24,7 @@ export interface Provider {
 	updateFile(args: {
 		//TODO: paths should be FilePath
 		path: string;
-		rev: string;
+		rev: string | undefined;
 		contents: ArrayBuffer;
 	}): Promise<void | DropboxResponse<files.FileMetadata>>;
 	downloadFile(args: { path: string }): Promise<FileMetadataExtended>;

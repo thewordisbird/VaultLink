@@ -584,7 +584,7 @@ export class Sync {
 
 		const res = await this.provider.updateFile({
 			path: clientFileMetadata.remotePath,
-			rev: clientFileMetadata.rev || "",
+			rev: clientFileMetadata.rev || undefined,
 			contents: clientFileContents,
 		});
 
