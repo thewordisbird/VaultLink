@@ -4,7 +4,7 @@ import { FileMetadataExtended } from "./dropbox.provider";
 
 export interface Provider {
 	email: string;
-	createFileHash: (args: { fileData: ArrayBuffer }) => string;
+	createFileHash: (args: { fileData: ArrayBuffer }) => FileHash;
 	listFiles(args: { vaultRoot: string }): Promise<{
 		files: (
 			| files.FileMetadataReference
@@ -39,15 +39,11 @@ export interface Provider {
 	): Promise<files.RelocationBatchResultEntry[]>;
 
 	processBatchCreateFile(
-		args: {
-			path: string;
-			contents: ArrayBuffer;
-		}[],
-	): Promise<DropboxResponse<files.UploadSessionFinishBatchResult>>;
+		args: ProcessBatchCreateFileArgs[],
+	): Promise<ProcessBatchCreateFileResult[]>;
 
-	processBatchCreateFolder(args: {
-		paths: string[];
-	}): Promise<files.CreateFolderBatchResultEntry[]>;
+	processBatchCreateFolder(args: ProcessBatchCreateFolderArgs): Promise<void>;
+
 	processBatchDeleteFolderOfFile(args: {
 		paths: string[];
 	}): Promise<files.DeleteBatchResultEntry[]>;
@@ -60,3 +56,22 @@ export interface Provider {
 		cursor: string;
 	}>;
 }
+
+declare const __brand: unique symbol;
+
+export type FileHash = string & { [__brand]: "file hash" };
+
+export interface ProcessBatchCreateFolderArgs {
+	paths: string[];
+}
+
+export interface ProcessBatchCreateFileArgs {
+	path: string;
+	contents: ArrayBuffer;
+}
+
+export type ProcessBatchCreateFileResult = {
+	path: string;
+	rev: string;
+	fileHash: FileHash;
+};

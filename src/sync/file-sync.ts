@@ -1,17 +1,17 @@
-import { App, Notice, TAbstractFile, TFile, TFolder } from "obsidian";
-import { PluginSettings } from "src/obsidian/settings";
-import { Provider } from "src/providers/types";
-import type { files } from "dropbox";
+import { App, TAbstractFile, TFile, TFolder } from "obsidian";
 import {
 	batch,
 	convertRemoteToClientPath,
-	RemoteFilePath,
 	sanitizeRemotePath,
 } from "src/utils";
 import {
 	obsidianFileRetrievalError,
 	providerSyncError,
 } from "src/obsidian/notice";
+import type { files } from "dropbox";
+import type { PluginSettings } from "src/obsidian/settings";
+import type { Provider } from "src/providers/types";
+import type { RemoteFilePath } from "src/utils";
 
 type FileSyncMetadata = TFile & {
 	remotePath: RemoteFilePath;
@@ -34,7 +34,7 @@ enum SyncStatus {
 	remoteAheadFolder = "REMOTE_AHEAD_FOLDER",
 }
 
-export class Sync {
+export class FileSync {
 	provider: Provider;
 	fileMap: Map<RemoteFilePath, FileSyncMetadata> | undefined;
 	obsidianApp: App;
@@ -52,7 +52,6 @@ export class Sync {
 	}
 
 	public async initializeFileMap(): Promise<void> {
-		//if (this.fileMap) return;
 		this.fileMap = new Map();
 
 		const clientFoldersOrFiles = this.obsidianApp.vault.getAllLoadedFiles();

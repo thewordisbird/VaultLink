@@ -2,7 +2,7 @@ import { EventRef, Plugin, TAbstractFile } from "obsidian";
 import { DEFAULT_SETTINGS, SettingsTab } from "./settings";
 import { DropboxProvider } from ".././providers/dropbox.provider";
 import { PubSub } from "../../lib/pubsub";
-import { Sync } from "src/sync/sync";
+import { FileSync } from "src/sync/file-sync";
 import type { PluginSettings } from "./settings";
 import { PubsubTopic } from "../types";
 import { providerLongpollError, providerSyncError } from "./notice";
@@ -11,7 +11,7 @@ import { providerLongpollError, providerSyncError } from "./notice";
 const LONGPOLL_FREQUENCY = 30000;
 
 export default class VaultLink extends Plugin {
-	private fileSync: Sync;
+	private fileSync: FileSync;
 	public settings: PluginSettings;
 
 	private longpollIntervalId: number | undefined;
@@ -34,7 +34,7 @@ export default class VaultLink extends Plugin {
 		// and then be seta as a more general name - provider
 		const dropboxProvider = new DropboxProvider();
 
-		this.fileSync = new Sync({
+		this.fileSync = new FileSync({
 			obsidianApp: this.app,
 			settings: this.settings,
 			provider: dropboxProvider,

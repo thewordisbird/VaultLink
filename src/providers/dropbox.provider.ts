@@ -2,7 +2,13 @@ import { Dropbox, DropboxAuth, DropboxResponse, files } from "dropbox";
 import { dropboxContentHasher } from "./dropbox.hasher";
 import { batchProcess, exponentialBackoff, RemoteFilePath } from "src/utils";
 import type { Folder } from "../types";
-import { Provider } from "./types";
+import type {
+	FileHash,
+	ProcessBatchCreateFileArgs,
+	ProcessBatchCreateFileResult,
+	ProcessBatchCreateFolderArgs,
+	Provider,
+} from "./types";
 
 // TODO: All listfolder, listFiles, listFilesContinue need to consider has_more
 
@@ -237,8 +243,10 @@ export class DropboxProvider implements Provider {
 	}
 
 	/* File and Folder Controls */
-	public processBatchCreateFolder(args: { paths: string[] }) {
-		return this.dropbox
+	public async processBatchCreateFolder(
+		args: ProcessBatchCreateFolderArgs,
+	): Promise<void> {
+		this.dropbox
 			.filesCreateFolderBatch({ paths: args.paths })
 			.then((res) => {
 				if (res.result[".tag"] == "complete") return res.result.entries;
@@ -367,10 +375,8 @@ export class DropboxProvider implements Provider {
 	}
 
 	public async processBatchCreateFile(
-		args: { path: string; contents: ArrayBuffer }[],
-	) {
-		console.log("_createFile start:", args);
-
+		args: ProcessBatchCreateFileArgs[],
+	): Promise<ProcessBatchCreateFileResult[]> {
 		const sessionIds = await this._batchCreateFileStart(args.length);
 		// If an error happens here, we still need to fire Finally to close the batch
 		const { fulfilled, rejected } = await this._batchCreateFileAppend({
@@ -378,17 +384,36 @@ export class DropboxProvider implements Provider {
 			sessionIds,
 		});
 
-		// TODO: Should this be returned to the caller??
 		const finishResults = await this._batchCreateFileFinish(fulfilled);
-		console.log("finishResults:", finishResults);
 
-		// TODO: Handle rejected
-		if (rejected.length) {
-			console.log("REJECTED UPDATES:", rejected);
+		// // TODO: Handle rejected
+		// if (rejected.length) {
+		// 	console.log("REJECTED UPDATES:", rejected);
+		// }
+
+		const finishSuccess = finishResults.result.entries.filter(
+			(
+				entry,
+			): entry is files.UploadSessionFinishBatchResultEntrySuccess =>
+				entry[".tag"] === "success",
+		);
+		const finishFailure = finishResults.result.entries.filter(
+			(
+				entry,
+			): entry is files.UploadSessionFinishBatchResultEntryFailure =>
+				entry[".tag"] === "failure",
+		);
+
+		// TODO: Determine how to handle rejected or finishFailures
+		if (rejected.length || finishFailure) {
+			throw new Error("Provider Create File Error");
 		}
 
-		console.log("_createFile return:", finishResults);
-		return finishResults;
+		return finishSuccess.map((entry) => ({
+			path: entry.path_lower!,
+			rev: entry.rev,
+			fileHash: entry.content_hash! as FileHash,
+		}));
 	}
 
 	private _batchCreateFileStart(numSessions: number) {
@@ -514,7 +539,8 @@ export class DropboxProvider implements Provider {
 			});
 	}
 
-	public createFileHash(args: { fileData: ArrayBuffer }) {
-		return dropboxContentHasher(args.fileData);
+	// Typed
+	public createFileHash(args: { fileData: ArrayBuffer }): FileHash {
+		return dropboxContentHasher(args.fileData) as FileHash;
 	}
 }
