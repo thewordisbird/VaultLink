@@ -11,6 +11,8 @@ import type {
 	ProcessBatchCreateFileArgs,
 	ProcessBatchCreateFileResult,
 	ProcessBatchCreateFolderArgs,
+	ProcessBatchMoveFolderOrFileArgs,
+	ProcessBatchMoveFolderOrFileResult,
 	Provider,
 	ProviderDeleted,
 	ProviderFile,
@@ -389,51 +391,82 @@ export class DropboxProvider implements Provider {
 	}
 
 	//
-	public processBatchRenameFolderOrFile(
-		args: { fromPath: ProviderPath; toPath: ProviderPath }[],
-	) {
-		return this.dropbox
-			.filesMoveBatchV2({
-				entries: args.map((arg) => ({
-					from_path: arg.fromPath,
-					to_path: arg.toPath,
-				})),
-			})
-			.then(async (res) => {
-				if (res.result[".tag"] == "complete") return res.result.entries;
-				else if (res.result[".tag"] == "async_job_id") {
-					return this.batchRenameFolderOrFileCheck({
-						asyncJobId: res.result.async_job_id,
-					}).then((res) => {
-						return res.result.entries;
-					});
-				} else {
-					throw new Error(
-						`Unknown ".tag" property: ${res.result[".tag"]}`,
-					);
-				}
-			});
+	public async processBatchMoveFolderOrFile(
+		args: ProcessBatchMoveFolderOrFileArgs[],
+	): Promise<ProcessBatchMoveFolderOrFileResult> {
+		const filesMoveBatchResult = await this.dropbox.filesMoveBatchV2({
+			entries: args.map((arg) => ({
+				from_path: arg.fromPath,
+				to_path: arg.toPath,
+			})),
+		});
+		if (filesMoveBatchResult.result[".tag"] == "complete") {
+			const success = filesMoveBatchResult.result.entries
+				.filter(
+					(entry): entry is files.RelocationBatchResultEntrySuccess =>
+						entry[".tag"] == "success",
+				)
+				.map((successEntry) => ({
+					name: successEntry.success.name,
+					path: successEntry.success.path_lower as ProviderPath,
+					type: successEntry.success[".tag"],
+				}));
+
+			return {
+				results: success,
+				hasFailure:
+					success.length !=
+					filesMoveBatchResult.result.entries.length,
+			};
+		} else if (filesMoveBatchResult.result[".tag"] == "async_job_id") {
+			const batchMoveFolderOrFileCheckResult =
+				await this.batchMoveFolderOrFileCheck({
+					asyncJobId: filesMoveBatchResult.result.async_job_id,
+				});
+
+			const success = batchMoveFolderOrFileCheckResult.result.entries
+				.filter(
+					(entry): entry is files.RelocationBatchResultEntrySuccess =>
+						entry[".tag"] == "success",
+				)
+				.map((successEntry) => ({
+					name: successEntry.success.name,
+					path: successEntry.success.path_lower as ProviderPath,
+					type: successEntry.success[".tag"],
+				}));
+
+			return {
+				results: success,
+				hasFailure:
+					success.length !=
+					batchMoveFolderOrFileCheckResult.result.entries.length,
+			};
+		} else {
+			throw new Error(
+				`Unknown ".tag" property: ${filesMoveBatchResult.result[".tag"]}`,
+			);
+		}
 	}
 
-	private batchRenameFolderOrFileCheck = exponentialBackoff<
+	private batchMoveFolderOrFileCheck = exponentialBackoff<
 		{ asyncJobId: string },
 		DropboxResponse<files.RelocationBatchV2JobStatus>,
 		DropboxResponse<files.RelocationBatchV2JobStatusComplete>
 	>({
-		func: this._batchRenameFolderOrFileCheck.bind(this),
-		checkFunc: this._batchRenameFolderOrFileCheckIsSuccess.bind(this),
+		func: this._batchMoveFolderOrFileCheck.bind(this),
+		checkFunc: this._batchMoveFolderOrFileCheckIsSuccess.bind(this),
 		interval: 250,
 		maxRetry: 10,
 		growthFactor: 2,
 	});
 
-	private _batchRenameFolderOrFileCheck(args: { asyncJobId: string }) {
+	private _batchMoveFolderOrFileCheck(args: { asyncJobId: string }) {
 		return this.dropbox.filesMoveBatchCheckV2({
 			async_job_id: args.asyncJobId,
 		});
 	}
 
-	private _batchRenameFolderOrFileCheckIsSuccess(
+	private _batchMoveFolderOrFileCheckIsSuccess(
 		args: DropboxResponse<files.RelocationBatchV2JobStatus>,
 	) {
 		return args.result[".tag"] == "complete";

@@ -58,6 +58,18 @@ export type ListFoldersAndFilesContinueResult = ListFoldersAndFilesResult & {
 export interface LongpollArgs extends ListFolderAndFilesContinueArgs {}
 export type LongopllResult = ListFoldersAndFilesResult;
 
+export interface ProcessBatchMoveFolderOrFileArgs {
+	fromPath: ProviderPath;
+	toPath: ProviderPath;
+}
+export type ProcessBatchMoveFolderOrFileResult = {
+	results: {
+		name: string;
+		path: ProviderPath;
+		type: "folder" | "file" | "deleted";
+	}[];
+	hasFailure: boolean;
+};
 export interface Provider {
 	email: string;
 
@@ -88,12 +100,9 @@ export interface Provider {
 
 	getCodeVerifier(): string;
 
-	processBatchRenameFolderOrFile(
-		args: {
-			fromPath: ProviderPath;
-			toPath: ProviderPath;
-		}[],
-	): Promise<files.RelocationBatchResultEntry[]>;
+	processBatchMoveFolderOrFile(
+		args: ProcessBatchMoveFolderOrFileArgs[],
+	): Promise<ProcessBatchMoveFolderOrFileResult>;
 
 	processBatchCreateFile(
 		args: ProcessBatchCreateFileArgs[],

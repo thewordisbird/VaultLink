@@ -5,7 +5,11 @@ import { PubSub } from "../../lib/pubsub";
 import { FileSync } from "src/sync/file-sync";
 import type { PluginSettings } from "./settings";
 import { ClientPath, ProviderPath, PubsubTopic } from "../types";
-import { providerLongpollError, providerSyncError } from "./notice";
+import {
+	providerLongpollError,
+	providerMoveFolderOrFileError,
+	providerSyncError,
+} from "./notice";
 
 // TODO: Define this type - should not bring dropbox contents into this file
 const LONGPOLL_FREQUENCY = 30000;
@@ -107,7 +111,7 @@ export default class VaultLink extends Plugin {
 			try {
 				await this.fileSync.initializeFileMap();
 				await this.fileSync.syncRemoteFiles();
-				// await this.fileSync.syncClientFiles();
+				await this.fileSync.syncClientFiles();
 				this.registerPluginIntervals();
 				this.registerPluginEventHandlers();
 			} catch (e) {
@@ -190,9 +194,9 @@ export default class VaultLink extends Plugin {
 			"rename",
 			(folderOrFile: TAbstractFile, ctx: string) => {
 				this.fileSync
-					.reconcileMoveFileOnClient({ folderOrFile, ctx })
+					.reconcileMoveFolderOrFileOnClient({ folderOrFile, ctx })
 					.catch((e) => {
-						providerSyncError(e);
+						providerMoveFolderOrFileError(e);
 					});
 			},
 		);

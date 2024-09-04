@@ -372,7 +372,7 @@ export class FileSync {
 	private batchCreateFolder = batch<TFolder>({ wait: 250 });
 	private batchCreateFile = batch<TFile>({ wait: 250 });
 
-	public async reconcileMoveFileOnClient(args: {
+	public async reconcileMoveFolderOrFileOnClient(args: {
 		folderOrFile: TAbstractFile;
 		ctx: string;
 	}) {
@@ -380,82 +380,48 @@ export class FileSync {
 			throw new Error("Sync Error: fileMap not initialized");
 		}
 
-		const { results, items } = await this.batchRenameFolderOrFile(args);
+		const { results, items } = await this.batchMoveFolderOrFile(args);
 
-		const entries = await this.provider.processBatchRenameFolderOrFile(
-			results.map((result) => {
-				const fromPath = sanitizeRemotePath({
-					vaultRoot: this.settings.providerPath,
-					filePath: result.ctx,
-				});
-				const toPath = sanitizeRemotePath({
-					vaultRoot: this.settings.providerPath,
-					filePath: result.folderOrFile.path,
-				});
-
-				return {
-					from_path: fromPath,
-					to_path: toPath,
-				};
-			}),
-		);
-
-		for (let entry of entries) {
-			if (entry[".tag"] == "failure") {
-				providerSyncError();
-				continue;
-			}
-
-			if (entry[".tag"] == "success") {
-				if (entry.success[".tag"] === "folder") {
-					const entryName = entry.success.name;
-
-					const subFiles = items.filter((item) => {
-						return (
-							item.folderOrFile instanceof TFile &&
-							item.folderOrFile.parent?.name == entryName
-						);
+		const batchMoveFolderOrFileResults =
+			await this.provider.processBatchMoveFolderOrFile(
+				results.map((result) => {
+					const fromPath = sanitizeRemotePath({
+						vaultRoot: this.settings.providerPath,
+						filePath: result.ctx,
+					});
+					const toPath = sanitizeRemotePath({
+						vaultRoot: this.settings.providerPath,
+						filePath: result.folderOrFile.path,
 					});
 
-					subFiles.forEach((subFile) => {
-						const sanitizedFromPath = sanitizeRemotePath({
-							vaultRoot: this.settings.providerPath,
-							filePath: subFile.ctx,
-						});
-						const sanitizedToPath = sanitizeRemotePath({
-							vaultRoot: this.settings.providerPath,
-							filePath: subFile.folderOrFile.path,
-						});
+					return {
+						fromPath,
+						toPath,
+					};
+				}),
+			);
 
-						const clientFileMetadata =
-							this.fileMap?.get(sanitizedFromPath);
-						if (clientFileMetadata)
-							this.fileMap?.delete(sanitizedFromPath);
-
-						this.fileMap?.set(sanitizedToPath, {
-							...(subFile.folderOrFile as TFile),
-							remotePath: sanitizedToPath,
-							rev: clientFileMetadata?.rev,
-							fileHash: clientFileMetadata?.fileHash,
-						});
-					});
-				}
-
-				if (entry.success[".tag"] == "file") {
-					const providerPath = entry.success.path_lower;
-					const clientFile = items.find(
-						(item) => item.folderOrFile.path == providerPath,
+		if (batchMoveFolderOrFileResults.hasFailure) {
+			// TODO: Improve Error Messaging
+			providerSyncError();
+		}
+		for (let result of batchMoveFolderOrFileResults.results) {
+			if (result.type == "folder") {
+				const subFiles = items.filter((item) => {
+					return (
+						item.folderOrFile instanceof TFile &&
+						item.folderOrFile.parent?.name == result.name
 					);
-					// TODO: This shouldn't be possible
-					if (!clientFile) continue;
+				});
 
+				subFiles.forEach((subFile) => {
 					const sanitizedFromPath = sanitizeRemotePath({
 						vaultRoot: this.settings.providerPath,
-						filePath: clientFile.ctx,
+						filePath: subFile.ctx,
 					});
 					const sanitizedToPath = sanitizeRemotePath({
 						vaultRoot: this.settings.providerPath,
-						filePath: clientFile.folderOrFile.path,
+						filePath: subFile.folderOrFile.path,
 					});
 
 					const clientFileMetadata =
@@ -464,22 +430,48 @@ export class FileSync {
 						this.fileMap?.delete(sanitizedFromPath);
 
 					this.fileMap?.set(sanitizedToPath, {
-						...(clientFile.folderOrFile as TFile),
+						...(subFile.folderOrFile as TFile),
 						remotePath: sanitizedToPath,
 						rev: clientFileMetadata?.rev,
 						fileHash: clientFileMetadata?.fileHash,
 					});
-				}
+				});
+			}
+
+			if (result.type == "file") {
+				const clientFile = items.find(
+					(item) => item.folderOrFile.path == result.path,
+				);
+				if (!clientFile) continue;
+
+				const sanitizedFromPath = sanitizeRemotePath({
+					vaultRoot: this.settings.providerPath,
+					filePath: clientFile.ctx,
+				});
+				const sanitizedToPath = sanitizeRemotePath({
+					vaultRoot: this.settings.providerPath,
+					filePath: clientFile.folderOrFile.path,
+				});
+
+				const clientFileMetadata = this.fileMap?.get(sanitizedFromPath);
+				if (clientFileMetadata) this.fileMap?.delete(sanitizedFromPath);
+
+				this.fileMap?.set(sanitizedToPath, {
+					...(clientFile.folderOrFile as TFile),
+					remotePath: sanitizedToPath,
+					rev: clientFileMetadata?.rev,
+					fileHash: clientFileMetadata?.fileHash,
+				});
 			}
 		}
 	}
 
-	private batchRenameFolderOrFile = batch<{
+	private batchMoveFolderOrFile = batch<{
 		folderOrFile: TAbstractFile;
 		ctx: string;
-	}>({ func: this._batchRenameFolderOrFile.bind(this), wait: 250 });
+	}>({ func: this._batchMoveFolderOrFile.bind(this), wait: 250 });
 
-	private _batchRenameFolderOrFile(
+	private _batchMoveFolderOrFile(
 		args: { folderOrFile: TAbstractFile; ctx: string }[],
 	) {
 		const foldersToProcess = args.filter(
