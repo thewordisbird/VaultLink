@@ -651,11 +651,11 @@ export class DropboxProvider implements Provider {
 		});
 	}
 
-	public updateFile(args: {
-		path: string;
+	public async updateFile(args: {
+		path: ProviderPath;
 		rev: string | undefined;
 		contents: ArrayBuffer;
-	}) {
+	}): Promise<ProviderFile> {
 		let mode: files.WriteModeUpdate | files.WriteModeOverwrite;
 		if (args.rev) {
 			mode = {
@@ -667,15 +667,18 @@ export class DropboxProvider implements Provider {
 				".tag": "overwrite",
 			};
 		}
-		return this.dropbox
-			.filesUpload({
-				mode,
-				path: args.path,
-				contents: new Blob([args.contents]),
-			})
-			.catch((e: any) => {
-				console.error("Dropbox filesUpload Error:", e);
-			});
+		const fileUploadResult = await this.dropbox.filesUpload({
+			mode,
+			path: args.path,
+			contents: new Blob([args.contents]),
+		});
+		return {
+			name: fileUploadResult.result.name,
+			path: fileUploadResult.result.path_lower as ProviderPath,
+			rev: fileUploadResult.result.rev,
+			fileHash: fileUploadResult.result.content_hash as FileHash,
+			serverModified: fileUploadResult.result.server_modified,
+		};
 	}
 
 	// Typed

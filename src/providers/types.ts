@@ -1,6 +1,5 @@
-import type { files, DropboxResponse } from "dropbox";
+//import type { files, DropboxResponse } from "dropbox";
 import { ProviderPath } from "src/types";
-import { RemoteFilePath } from "src/utils";
 import { FileMetadataExtended } from "./dropbox.provider";
 
 // files: files.map((file) => ({
@@ -90,7 +89,7 @@ export interface Provider {
 		path: string;
 		rev: string | undefined;
 		contents: ArrayBuffer;
-	}): Promise<void | DropboxResponse<files.FileMetadata>>;
+	}): Promise<ProviderFile>;
 
 	downloadFile(args: { path: string }): Promise<FileMetadataExtended>;
 
