@@ -511,7 +511,7 @@ export class DropboxProvider implements Provider {
 		);
 
 		// TODO: Determine how to handle rejected or finishFailures
-		if (rejected.length || finishFailure) {
+		if (rejected.length || finishFailure.length) {
 			throw new Error("Provider Create File Error");
 		}
 
