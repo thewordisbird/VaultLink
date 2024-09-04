@@ -537,7 +537,7 @@ export class DropboxProvider implements Provider {
 		const { files, sessionIds } = args;
 		const entries = [];
 		for (let i = 0; i < files.length; i++) {
-			console.log("bytesize:", files[i].contents.byteLength);
+			//console.log("bytesize:", files[i].contents.byteLength);
 
 			// NOTE: This assumes all files will be less than 150Mb
 			// An improvement can be made to split the file into 150Mb

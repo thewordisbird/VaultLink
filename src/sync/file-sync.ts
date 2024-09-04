@@ -49,6 +49,7 @@ export class FileSync {
 	}
 
 	public async initializeFileMap(): Promise<void> {
+		console.log("start - initializeFileMap");
 		this.fileMap = new Map();
 
 		const clientFoldersOrFiles = this.obsidianApp.vault.getAllLoadedFiles();
@@ -86,9 +87,11 @@ export class FileSync {
 				rev: undefined,
 			});
 		}
+		console.log("end - initializeFileMap");
 	}
 
 	public async syncClientFiles(): Promise<void> {
+		console.log("start - syncClientFiles");
 		if (!this.fileMap) {
 			throw new Error("Sync Error: fileMap not initialized");
 		}
@@ -109,6 +112,7 @@ export class FileSync {
 
 		if (!files.length) return;
 
+		console.log("pre process batch - syncClientFiles");
 		await this.provider.processBatchCreateFile(
 			fileContents.reduce<{ path: string; contents: ArrayBuffer }[]>(
 				(acc, cur, idx) => {
@@ -129,9 +133,12 @@ export class FileSync {
 				[],
 			),
 		);
+
+		console.log("end - syncClientFiles");
 	}
 
 	public async syncRemoteFiles(): Promise<void> {
+		console.log("start - syncRemoteFiles");
 		if (!this.fileMap) {
 			throw new Error("Sync Error: fileMap not initialized");
 		}
@@ -143,6 +150,7 @@ export class FileSync {
 
 		await this.syncFiles({ folders, files, deleted });
 		this.cursor = cursor;
+		console.log("end - syncRemoteFiles");
 	}
 
 	public async syncRemoteFilesLongPoll(): Promise<void> {
@@ -633,7 +641,11 @@ export class FileSync {
 			remotePath: args.providerFolder.path,
 		});
 
-		this.obsidianApp.vault.createFolder(sanitizedClientPath);
+		try {
+			await this.obsidianApp.vault.createFolder(sanitizedClientPath);
+		} catch (e) {
+			// error indicates folder exists. That is ok
+		}
 	}
 
 	private async reconcileClientNotFound(args: {
