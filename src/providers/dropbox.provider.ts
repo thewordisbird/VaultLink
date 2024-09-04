@@ -1,13 +1,20 @@
 import { Dropbox, DropboxAuth, DropboxResponse, files } from "dropbox";
 import { dropboxContentHasher } from "./dropbox.hasher";
-import { batchProcess, exponentialBackoff, RemoteFilePath } from "src/utils";
-import type { Folder } from "../types";
+import { exponentialBackoff, RemoteFilePath } from "src/utils";
+import type { Folder, ProviderPath } from "../types";
 import type {
 	FileHash,
+	ListFoldersAndFilesArgs,
+	ListFoldersAndFilesResult,
+	LongopllResult,
+	LongpollArgs,
 	ProcessBatchCreateFileArgs,
 	ProcessBatchCreateFileResult,
 	ProcessBatchCreateFolderArgs,
 	Provider,
+	ProviderDeleted,
+	ProviderFile,
+	ProviderFolder,
 } from "./types";
 
 // TODO: All listfolder, listFiles, listFilesContinue need to consider has_more
@@ -176,51 +183,144 @@ export class DropboxProvider implements Provider {
 		});
 	}
 
-	listFiles(args: { vaultRoot: string }) {
-		return this.dropbox
-			.filesListFolder({ path: args.vaultRoot, recursive: true })
-			.then((res) => {
-				return {
-					files: res.result.entries,
-					cursor: res.result.cursor,
-				};
-			})
-			.catch((e: any) => {
-				console.error("listFolders error:", e);
-				throw new Error(DROPBOX_PROVIDER_ERRORS.resourceAccessError);
-			});
+	public async listFoldersAndFiles(
+		args: ListFoldersAndFilesArgs,
+	): Promise<ListFoldersAndFilesResult> {
+		let filesListFolderResult = await this.dropbox.filesListFolder({
+			path: args.vaultRoot,
+			recursive: true,
+		});
+		let files = filesListFolderResult.result.entries
+			.filter(
+				(entry): entry is files.FileMetadataReference =>
+					entry[".tag"] == "file",
+			)
+			.map((file) => ({
+				name: file.name,
+				path: file.path_lower as ProviderPath,
+				rev: file.rev,
+				fileHash: file.content_hash as FileHash,
+				serverModified: file.server_modified,
+			}));
+
+		let folders = filesListFolderResult.result.entries
+			.filter(
+				(entry): entry is files.FolderMetadataReference =>
+					entry[".tag"] == "folder",
+			)
+			.map((folder) => ({
+				name: folder.name,
+				path: folder.path_lower as ProviderPath,
+			}));
+
+		let deleted = filesListFolderResult.result.entries
+			.filter(
+				(entry): entry is files.DeletedMetadataReference =>
+					entry[".tag"] == "deleted",
+			)
+			.map((deletedResource) => ({
+				name: deletedResource.name,
+				path: deletedResource.path_lower as ProviderPath,
+			}));
+
+		let cursor = filesListFolderResult.result.cursor;
+		let hasMore = filesListFolderResult.result.has_more;
+
+		while (hasMore) {
+			const listFolderAndFilesContinueResilt =
+				await this.listFoldersAndFilesContinue({ cursor });
+			files.concat(listFolderAndFilesContinueResilt.files);
+			folders.concat(listFolderAndFilesContinueResilt.folders);
+			deleted.concat(listFolderAndFilesContinueResilt.deleted);
+
+			cursor = listFolderAndFilesContinueResilt.cursor;
+			hasMore = listFolderAndFilesContinueResilt.hasMore;
+		}
+
+		return {
+			files,
+			folders,
+			deleted,
+			cursor,
+		};
 	}
 
-	listFilesContinue(args: { cursor: string }) {
-		return this.dropbox
-			.filesListFolderContinue({
-				cursor: args.cursor,
-			})
-			.then((res) => {
-				return {
-					files: res.result.entries,
-					cursor: res.result.cursor,
-				};
-			})
-			.catch((e: any) => {
-				console.error("listFoldersContinue error:", e);
-				throw new Error(DROPBOX_PROVIDER_ERRORS.resourceAccessError);
-			});
+	async listFoldersAndFilesContinue(args: { cursor: string }) {
+		const filesListFolderContinueResult =
+			await this.dropbox.filesListFolderContinue({ cursor: args.cursor });
+
+		const files = filesListFolderContinueResult.result.entries
+			.filter(
+				(entry): entry is files.FileMetadataReference =>
+					entry[".tag"] == "file",
+			)
+			.map((file) => ({
+				name: file.name,
+				path: file.path_lower as ProviderPath,
+				rev: file.rev,
+				fileHash: file.content_hash as FileHash,
+				serverModified: file.server_modified,
+			}));
+
+		const folders = filesListFolderContinueResult.result.entries
+			.filter(
+				(entry): entry is files.FolderMetadataReference =>
+					entry[".tag"] == "folder",
+			)
+			.map((folder) => ({
+				name: folder.name,
+				path: folder.path_lower as ProviderPath,
+			}));
+
+		const deleted = filesListFolderContinueResult.result.entries
+			.filter(
+				(entry): entry is files.DeletedMetadataReference =>
+					entry[".tag"] == "deleted",
+			)
+			.map((deletedResource) => ({
+				name: deletedResource.name,
+				path: deletedResource.path_lower as ProviderPath,
+			}));
+
+		const cursor = filesListFolderContinueResult.result.cursor;
+		const hasMore = filesListFolderContinueResult.result.has_more;
+
+		return {
+			files,
+			folders,
+			deleted,
+			hasMore,
+			cursor,
+		};
 	}
 
-	public async longpoll(args: { cursor: string }) {
+	public async longpoll(args: LongpollArgs): Promise<LongopllResult> {
 		// Uses default `timeout` arg of 30 seconds
 		const longPollResult = await this.dropbox.filesListFolderLongpoll({
 			cursor: args.cursor,
 		});
+
 		if (!longPollResult.result.changes) {
-			return { cursor: args.cursor, files: [] };
+			return { folders: [], files: [], deleted: [], cursor: args.cursor };
 		}
-		// TODO: Refactor to include has_more
-		let remoteFiles = await this.listFilesContinue({
-			cursor: args.cursor,
-		});
-		return remoteFiles;
+
+		let folders: ProviderFolder[] = [];
+		let files: ProviderFile[] = [];
+		let deleted: ProviderDeleted[] = [];
+
+		let hasMore: boolean;
+		let cursor = args.cursor;
+		do {
+			const listFoldersAndFilesContinueResult =
+				await this.listFoldersAndFilesContinue({ cursor });
+			folders.concat(listFoldersAndFilesContinueResult.folders);
+			files.concat(listFoldersAndFilesContinueResult.files);
+			deleted.concat(listFoldersAndFilesContinueResult.deleted);
+			cursor = listFoldersAndFilesContinueResult.cursor;
+			hasMore = listFoldersAndFilesContinueResult.hasMore;
+		} while (hasMore);
+
+		return { folders, files, deleted, cursor };
 	}
 
 	downloadFile(args: { path: string }): Promise<FileMetadataExtended> {
@@ -288,11 +388,17 @@ export class DropboxProvider implements Provider {
 		return args.result[".tag"] == "complete";
 	}
 
+	//
 	public processBatchRenameFolderOrFile(
-		args: { from_path: RemoteFilePath; to_path: RemoteFilePath }[],
+		args: { fromPath: ProviderPath; toPath: ProviderPath }[],
 	) {
 		return this.dropbox
-			.filesMoveBatchV2({ entries: args })
+			.filesMoveBatchV2({
+				entries: args.map((arg) => ({
+					from_path: arg.fromPath,
+					to_path: arg.toPath,
+				})),
+			})
 			.then(async (res) => {
 				if (res.result[".tag"] == "complete") return res.result.entries;
 				else if (res.result[".tag"] == "async_job_id") {
@@ -410,7 +516,7 @@ export class DropboxProvider implements Provider {
 		}
 
 		return finishSuccess.map((entry) => ({
-			path: entry.path_lower!,
+			path: entry.path_lower! as ProviderPath,
 			rev: entry.rev,
 			fileHash: entry.content_hash! as FileHash,
 		}));

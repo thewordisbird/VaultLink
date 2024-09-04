@@ -4,7 +4,7 @@ import { DropboxProvider } from ".././providers/dropbox.provider";
 import { PubSub } from "../../lib/pubsub";
 import { FileSync } from "src/sync/file-sync";
 import type { PluginSettings } from "./settings";
-import { PubsubTopic } from "../types";
+import { ClientPath, ProviderPath, PubsubTopic } from "../types";
 import { providerLongpollError, providerSyncError } from "./notice";
 
 // TODO: Define this type - should not bring dropbox contents into this file
@@ -81,14 +81,16 @@ export default class VaultLink extends Plugin {
 			async (args: { payload: string }) => {
 				const { payload } = args;
 
-				if (this.settings.cloudVaultPath == payload) {
-					console.log("No Change to vault path - returning");
-					return;
-				}
+				const providerPath = ("/" + payload) as ProviderPath;
+				const providerPathDisplay = payload as ClientPath;
 
-				this.settings.cloudVaultPath = payload;
+				if (this.settings.providerPath == providerPath) return;
+
+				this.settings.providerPath = providerPath;
+				this.settings.providerPathDisplay = providerPathDisplay;
+
 				await this.saveSettings();
-				if (!this.settings.cloudVaultPath) return;
+				if (!this.settings.providerPath) return;
 
 				try {
 					await this.fileSync.initializeFileMap();
@@ -101,9 +103,7 @@ export default class VaultLink extends Plugin {
 		);
 
 		pubsub.subscribe(PubsubTopic.AUTHORIZATION_SUCCESS, async () => {
-			//TODO: Cloudvault setting should be reset on login. Once that happend
-			//need to check if there is a valut setup.
-			if (!this.settings.cloudVaultPath) return;
+			if (!this.settings.providerPath) return;
 			try {
 				await this.fileSync.initializeFileMap();
 				await this.fileSync.syncRemoteFiles();

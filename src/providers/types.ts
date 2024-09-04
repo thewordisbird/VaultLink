@@ -1,40 +1,97 @@
 import type { files, DropboxResponse } from "dropbox";
+import { ProviderPath } from "src/types";
 import { RemoteFilePath } from "src/utils";
 import { FileMetadataExtended } from "./dropbox.provider";
 
+// files: files.map((file) => ({
+// 	name: file.name,
+// 	path: file.path_lower as ProviderPath,
+// 	rev: file.rev,
+// 	fileHash: file.content_hash as FileHash,
+// 	serverModified: file.server_modified,
+// })),
+// folders: folders.map((folder) => ({
+// 	name: folder.name,
+// 	path: folder.path_lower as ProviderPath,
+// })),
+// deleted: deleted.map((deletedResource) => ({
+// 	name: deletedResource.name,
+// 	path: deletedResource.path_lower as ProviderPath,
+// })),
+export type ProviderFile = {
+	name: string;
+	path: ProviderPath;
+	rev: string;
+	fileHash: FileHash;
+	serverModified: string; // TODO: Should this be converted to a date?
+};
+
+export type ProviderFolder = {
+	name: string;
+	path: ProviderPath;
+};
+
+export type ProviderDeleted = {
+	name: string;
+	path: ProviderPath;
+};
+
+export interface ListFoldersAndFilesArgs {
+	vaultRoot: ProviderPath;
+}
+
+export type ListFoldersAndFilesResult = {
+	files: ProviderFile[];
+	folders: ProviderFolder[];
+	deleted: ProviderDeleted[];
+	cursor: string;
+};
+
+export interface ListFolderAndFilesContinueArgs {
+	cursor: string;
+}
+
+export type ListFoldersAndFilesContinueResult = ListFoldersAndFilesResult & {
+	hasMore: boolean;
+};
+
+export interface LongpollArgs extends ListFolderAndFilesContinueArgs {}
+export type LongopllResult = ListFoldersAndFilesResult;
+
 export interface Provider {
 	email: string;
+
 	createFileHash: (args: { fileData: ArrayBuffer }) => FileHash;
-	listFiles(args: { vaultRoot: string }): Promise<{
-		files: (
-			| files.FileMetadataReference
-			| files.FolderMetadataReference
-			| files.DeletedMetadataReference
-		)[];
-		cursor: string;
-	}>;
-	listFilesContinue(args: { cursor: string }): Promise<{
-		files: (
-			| files.FileMetadataReference
-			| files.FolderMetadataReference
-			| files.DeletedMetadataReference
-		)[];
-		cursor: string;
-	}>;
+
+	listFoldersAndFiles(
+		args: ListFoldersAndFilesArgs,
+	): Promise<ListFoldersAndFilesResult>;
+
+	listFoldersAndFilesContinue(
+		args: ListFolderAndFilesContinueArgs,
+	): Promise<ListFoldersAndFilesContinueResult>;
+
+	longpoll(args: LongpollArgs): Promise<LongopllResult>;
+
 	updateFile(args: {
 		//TODO: paths should be FilePath
 		path: string;
 		rev: string | undefined;
 		contents: ArrayBuffer;
 	}): Promise<void | DropboxResponse<files.FileMetadata>>;
+
 	downloadFile(args: { path: string }): Promise<FileMetadataExtended>;
+
 	revokeAuthorizationToken(): Promise<void>;
+
 	getAuthenticationUrl(): Promise<String>;
+
 	getCodeVerifier(): string;
+
 	processBatchRenameFolderOrFile(
 		args: {
-			from_path: RemoteFilePath;
-			to_path: RemoteFilePath;
+			fromPath: ProviderPath;
+			toPath: ProviderPath;
 		}[],
 	): Promise<files.RelocationBatchResultEntry[]>;
 
@@ -47,14 +104,6 @@ export interface Provider {
 	processBatchDeleteFolderOfFile(args: {
 		paths: string[];
 	}): Promise<files.DeleteBatchResultEntry[]>;
-	longpoll(args: { cursor: string }): Promise<{
-		files: (
-			| files.FileMetadataReference
-			| files.FolderMetadataReference
-			| files.DeletedMetadataReference
-		)[];
-		cursor: string;
-	}>;
 }
 
 declare const __brand: unique symbol;
@@ -71,7 +120,7 @@ export interface ProcessBatchCreateFileArgs {
 }
 
 export type ProcessBatchCreateFileResult = {
-	path: string;
+	path: ProviderPath;
 	rev: string;
 	fileHash: FileHash;
 };

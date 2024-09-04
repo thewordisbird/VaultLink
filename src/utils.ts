@@ -1,3 +1,5 @@
+import { ClientPath, ProviderPath } from "./types";
+
 export function batchProcess<I, R>(
 	func: (args: I[]) => Promise<R>,
 	wait: number,
@@ -129,12 +131,12 @@ export type RemoteFilePath = string & { [__brand]: "remote path" };
 export function sanitizeRemotePath(args: {
 	vaultRoot?: string;
 	filePath: string;
-}): RemoteFilePath {
+}): ProviderPath {
 	// TODO: Add validation & error handling
 	if (args.vaultRoot == undefined) {
-		return args.filePath.toLowerCase() as RemoteFilePath;
+		return args.filePath.toLowerCase() as ProviderPath;
 	}
-	return `/${args.vaultRoot}/${args.filePath}`.toLowerCase() as RemoteFilePath;
+	return `${args.vaultRoot}/${args.filePath}`.toLowerCase() as ProviderPath;
 }
 
 export function sanitizeClientPath(args: { filePath: string }): ClientFilePath {
@@ -148,8 +150,8 @@ export function convertClientToRemotePath(args: {
 }
 
 export function convertRemoteToClientPath(args: {
-	remotePath: RemoteFilePath;
-}): ClientFilePath {
-	return args.remotePath.split("/").slice(4).join("/") as ClientFilePath;
+	remotePath: ProviderPath;
+}): ClientPath {
+	return args.remotePath.split("/").slice(4).join("/") as ClientPath;
 	//return args.remotePath.slice(1) as ClientFilePath;
 }
