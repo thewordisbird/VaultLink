@@ -243,20 +243,84 @@ export class DropboxProvider implements Provider {
 		};
 	}
 
-	// TODO: change this to 'createFolder' to be consistent with the rest of the api.
-	addFolder(path: string) {
-		return new Promise<void>((resolve, reject) => {
-			this.dropbox
-				.filesCreateFolderV2({ path })
-				.then(function () {
-					resolve();
-				})
-				.catch(function () {
-					reject(
-						new Error(DROPBOX_PROVIDER_ERRORS.resourceAccessError),
-					);
-				});
+	public async processBatchCreateFolder(args: {
+		paths: ProviderPath[];
+	}): Promise<{ results: ProviderFolder[]; hasFailure: boolean }> {
+		const batchResults = await this.dropbox.filesCreateFolderBatch({
+			paths: args.paths,
 		});
+
+		if (batchResults.result[".tag"] == "complete") {
+			const success = batchResults.result.entries
+				.filter(
+					(
+						entry,
+					): entry is files.CreateFolderBatchResultEntrySuccess =>
+						entry[".tag"] == "success",
+				)
+				.map((successEntry) => ({
+					name: successEntry.metadata.name,
+					path: successEntry.metadata.path_lower as ProviderPath,
+				}));
+
+			return {
+				results: success,
+				hasFailure:
+					success.length != batchResults.result.entries.length,
+			};
+		} else if (batchResults.result[".tag"] == "async_job_id") {
+			const batchCheckResults = await this.batchCreateFolderCheck({
+				asyncJobId: batchResults.result.async_job_id,
+			});
+
+			const success = batchCheckResults.result.entries
+				.filter(
+					(
+						entry,
+					): entry is files.CreateFolderBatchResultEntrySuccess =>
+						entry[".tag"] == "success",
+				)
+				.map((successEntry) => ({
+					name: successEntry.metadata.name,
+					path: successEntry.metadata.path_lower as ProviderPath,
+				}));
+
+			return {
+				results: success,
+				hasFailure:
+					success.length != batchCheckResults.result.entries.length,
+			};
+		} else {
+			throw new Error(
+				`Unknown ".tag" property: ${batchResults.result[".tag"]}`,
+			);
+		}
+	}
+
+	private batchCreateFolderCheck = exponentialBackoff<
+		{ asyncJobId: string },
+		DropboxResponse<files.CreateFolderBatchJobStatus>,
+		DropboxResponse<files.CreateFolderBatchJobStatusComplete>
+	>({
+		func: this._batchCreateFolderCheck.bind(this),
+		checkFunc: this._batchCreateFolderCheckIsSuccess.bind(this),
+		interval: 250,
+		maxRetry: 10,
+		growthFactor: 2,
+	});
+
+	private _batchCreateFolderCheck(args: {
+		asyncJobId: string;
+	}): Promise<DropboxResponse<files.CreateFolderBatchJobStatus>> {
+		return this.dropbox.filesCreateFolderBatchCheck({
+			async_job_id: args.asyncJobId,
+		});
+	}
+
+	private _batchCreateFolderCheckIsSuccess(
+		args: DropboxResponse<files.CreateFolderBatchJobStatus>,
+	): boolean {
+		return args.result[".tag"] == "complete";
 	}
 
 	public async longpoll(args: LongpollArgs): Promise<LongopllResult> {
@@ -308,50 +372,6 @@ export class DropboxProvider implements Provider {
 	}
 
 	/* File and Folder Controls */
-	public async processBatchCreateFolder(
-		args: ProcessBatchCreateFolderArgs,
-	): Promise<void> {
-		this.dropbox
-			.filesCreateFolderBatch({ paths: args.paths })
-			.then((res) => {
-				if (res.result[".tag"] == "complete") return res.result.entries;
-				else if (res.result[".tag"] == "async_job_id") {
-					return this.batchCreateFolderCheck({
-						asyncJobId: res.result.async_job_id,
-					}).then((res) => {
-						return res.result.entries;
-					});
-				} else {
-					throw new Error(
-						`Unknown ".tag" property: ${res.result[".tag"]}`,
-					);
-				}
-			});
-	}
-
-	private batchCreateFolderCheck = exponentialBackoff<
-		{ asyncJobId: string },
-		DropboxResponse<files.CreateFolderBatchJobStatus>,
-		DropboxResponse<files.CreateFolderBatchJobStatusComplete>
-	>({
-		func: this._batchCreateFolderCheck.bind(this),
-		checkFunc: this._batchCreateFolderCheckIsSuccess.bind(this),
-		interval: 250,
-		maxRetry: 10,
-		growthFactor: 2,
-	});
-
-	private _batchCreateFolderCheck(args: { asyncJobId: string }) {
-		return this.dropbox.filesCreateFolderBatchCheck({
-			async_job_id: args.asyncJobId,
-		});
-	}
-
-	private _batchCreateFolderCheckIsSuccess(
-		args: DropboxResponse<files.CreateFolderBatchJobStatus>,
-	) {
-		return args.result[".tag"] == "complete";
-	}
 
 	//
 	public async processBatchMoveFolderOrFile(

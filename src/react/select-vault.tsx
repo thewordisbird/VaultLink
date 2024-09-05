@@ -1,5 +1,5 @@
 import { StrictMode, useState, useEffect } from "react";
-import { Folder, PubsubTopic } from "src/types";
+import { Folder, ProviderPath, PubsubTopic } from "src/types";
 import { PubSub } from "../../lib/pubsub";
 import { DropboxProvider } from "../providers/dropbox.provider";
 import { useSelectVault } from "./useSelectVault";
@@ -43,18 +43,22 @@ const SelectVault: React.FC<SelectVaultProps> = ({
 			<CurrentLocation
 				path={state.path}
 				isAddFolderDisplayed={state.isAddFolderDisplayed}
-				handleSave={(folderName) => {
+				handleSave={async (folderName) => {
 					const folderPath = state.path.length
 						? `/${state.path.join("/")}/${folderName}`
 						: `/${folderName}`;
 
-					dropboxProvider.addFolder(folderPath).then((_res) => {
-						dispatch({
-							type: "ADD_FOLDER",
-							payload: {
-								folderName: folderPath.split("/").pop() || "",
-							},
+					const { hasFailure } =
+						await dropboxProvider.processBatchCreateFolder({
+							paths: [folderPath as ProviderPath],
 						});
+					// TODO: Error handling
+					if (hasFailure) return;
+					dispatch({
+						type: "ADD_FOLDER",
+						payload: {
+							folderName: folderPath.split("/").pop() || "",
+						},
 					});
 				}}
 				handleCancel={() => {

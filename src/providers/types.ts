@@ -104,15 +104,15 @@ export interface Provider {
 
 	authorizeWithRefreshToken(refreshToken: string): void;
 
-	createFileHash: (args: CreateFileHashArgs) => FileHash;
-
 	listFoldersAndFiles(
 		args: ListFoldersAndFilesArgs,
 	): Promise<ListFoldersAndFilesResult>;
 
-	listFoldersAndFilesContinue(
-		args: ListFolderAndFilesContinueArgs,
-	): Promise<ListFoldersAndFilesContinueResult>;
+	processBatchCreateFolder(args: {
+		paths: ProviderPath[];
+	}): Promise<{ results: ProviderFolder[]; hasFailure: boolean }>;
+
+	createFileHash: (args: CreateFileHashArgs) => FileHash;
 
 	longpoll(args: LongpollArgs): Promise<LongopllResult>;
 
@@ -131,8 +131,6 @@ export interface Provider {
 	processBatchCreateFile(
 		args: ProcessBatchCreateFileArgs[],
 	): Promise<ProcessBatchCreateFileResult[]>;
-
-	processBatchCreateFolder(args: ProcessBatchCreateFolderArgs): Promise<void>;
 
 	processBatchDeleteFolderOrFile(args: {
 		paths: ProviderPath[];
