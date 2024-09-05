@@ -99,6 +99,8 @@ export interface Provider {
 		authorizationCode: string,
 	): Promise<{ refreshToken: string }>;
 
+	revokeAuthorizationToken(): Promise<void>;
+
 	createFileHash: (args: CreateFileHashArgs) => FileHash;
 
 	listFoldersAndFiles(
@@ -118,8 +120,6 @@ export interface Provider {
 	}): Promise<ProviderFile>;
 
 	downloadFile(args: { path: string }): Promise<FileMetadataExtended>;
-
-	revokeAuthorizationToken(): Promise<void>;
 
 	processBatchMoveFolderOrFile(
 		args: ProcessBatchMoveFolderOrFileArgs[],

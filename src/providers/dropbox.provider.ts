@@ -120,15 +120,9 @@ export class DropboxProvider implements Provider {
 		return { refreshToken: refresh_token };
 	}
 
-	revokeAuthorizationToken(): Promise<void> {
-		return this.dropbox
-			.authTokenRevoke()
-			.then(() => {
-				this.state = {} as DropboxState;
-			})
-			.catch((_e: any) => {
-				throw new Error(DROPBOX_PROVIDER_ERRORS.revocationError);
-			});
+	public async revokeAuthorizationToken(): Promise<void> {
+		await this.dropbox.authTokenRevoke();
+		this.state = {} as DropboxState;
 	}
 
 	authorizeWithRefreshToken(refreshToken: string): void {
