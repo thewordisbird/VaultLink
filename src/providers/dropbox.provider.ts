@@ -93,7 +93,7 @@ export class DropboxProvider implements Provider {
 		return authUrl.toString();
 	}
 
-	getCodeVerifier(): string {
+	public getCodeVerifier(): string {
 		return this.dropboxAuth.getCodeVerifier();
 	}
 
