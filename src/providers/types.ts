@@ -95,6 +95,10 @@ export interface Provider {
 
 	setCodeVerifier(codeVerifier: string): void;
 
+	setAccessAndRefreshToken(
+		authorizationCode: string,
+	): Promise<{ refreshToken: string }>;
+
 	createFileHash: (args: CreateFileHashArgs) => FileHash;
 
 	listFoldersAndFiles(

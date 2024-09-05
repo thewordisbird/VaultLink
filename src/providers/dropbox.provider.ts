@@ -97,31 +97,27 @@ export class DropboxProvider implements Provider {
 		return this.dropboxAuth.getCodeVerifier();
 	}
 
-	setCodeVerifier(codeVerifier: string): void {
+	public setCodeVerifier(codeVerifier: string): void {
 		return this.dropboxAuth.setCodeVerifier(codeVerifier);
 	}
 
-	async setAccessAndRefreshToken(
+	public async setAccessAndRefreshToken(
 		authorizationCode: string,
 	): Promise<{ refreshToken: string }> {
-		try {
-			const {
-				result: { access_token, refresh_token },
-			} = (await this.dropboxAuth.getAccessTokenFromCode(
-				REDIRECT_URI,
-				authorizationCode,
-			)) as DropboxResponse<{
-				access_token: string;
-				refresh_token: string;
-			}>;
+		const {
+			result: { access_token, refresh_token },
+		} = (await this.dropboxAuth.getAccessTokenFromCode(
+			REDIRECT_URI,
+			authorizationCode,
+		)) as DropboxResponse<{
+			access_token: string;
+			refresh_token: string;
+		}>;
 
-			this.dropboxAuth.setAccessToken(access_token);
-			this.dropboxAuth.setRefreshToken(refresh_token);
+		this.dropboxAuth.setAccessToken(access_token);
+		this.dropboxAuth.setRefreshToken(refresh_token);
 
-			return { refreshToken: refresh_token };
-		} catch (_e) {
-			throw new Error(DROPBOX_PROVIDER_ERRORS.authenticationError);
-		}
+		return { refreshToken: refresh_token };
 	}
 
 	revokeAuthorizationToken(): Promise<void> {
