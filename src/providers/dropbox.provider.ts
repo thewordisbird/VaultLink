@@ -4,12 +4,9 @@ import { exponentialBackoff } from "src/utils";
 import type { Folder, ProviderPath } from "../types";
 // TODO: simplify - doesn't need to be so specific
 import type {
-	CreateFileHashArgs,
 	FileHash,
 	ListFoldersAndFilesArgs,
 	ListFoldersAndFilesResults,
-	ProcessBatchCreateFileArgs,
-	ProcessBatchCreateFileResult,
 	Provider,
 	ProviderDeleteResult,
 	ProviderFileResult,
@@ -654,6 +651,10 @@ export class DropboxProvider implements Provider {
 		});
 	}
 
+	public createFileHash(args: { contents: ArrayBuffer }): FileHash {
+		return dropboxContentHasher(args.contents) as FileHash;
+	}
+
 	downloadFile(args: { path: string }): Promise<FileMetadataExtended> {
 		const { path } = args;
 		return this.dropbox.filesDownload({ path }).then((res) => res.result);
@@ -701,9 +702,5 @@ export class DropboxProvider implements Provider {
 			fileHash: fileUploadResult.result.content_hash as FileHash,
 			serverModified: fileUploadResult.result.server_modified,
 		};
-	}
-
-	public createFileHash(args: CreateFileHashArgs): FileHash {
-		return dropboxContentHasher(args.contents) as FileHash;
 	}
 }

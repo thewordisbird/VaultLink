@@ -42,15 +42,6 @@ export interface CreateFileHashArgs {
 	contents: ArrayBuffer;
 }
 
-export interface ProcessBatchCreateFolderArgs {
-	paths: string[];
-}
-
-export interface ProcessBatchCreateFileArgs {
-	path: string;
-	contents: ArrayBuffer;
-}
-
 export type ProcessBatchCreateFileResult = {
 	path: ProviderPath;
 	rev: string;
@@ -125,8 +116,8 @@ export interface Provider {
 		args: { path: ProviderPath; contents: ArrayBuffer }[],
 	): Promise<{ results: ProviderFileResult[]; hasFailure: boolean }>;
 
+	createFileHash: (args: { contents: ArrayBuffer }) => FileHash;
 	// TODO: Type audit
-	createFileHash: (args: CreateFileHashArgs) => FileHash;
 
 	updateFile(args: {
 		path: ProviderPath;
