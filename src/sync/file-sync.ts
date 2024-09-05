@@ -109,26 +109,30 @@ export class FileSync {
 
 		if (!files.length) return;
 
-		await this.provider.processBatchCreateFile(
-			fileContents.reduce<{ path: string; contents: ArrayBuffer }[]>(
-				(acc, cur, idx) => {
-					if (cur.status == "rejected") {
-						obsidianFileRetrievalError(files[idx].name);
-					} else {
-						const sanitizedRemotePath = sanitizeRemotePath({
-							vaultRoot: this.settings.providerPath,
-							filePath: files[idx].path,
-						});
-						acc.push({
-							path: sanitizedRemotePath,
-							contents: cur.value,
-						});
-					}
-					return acc;
-				},
-				[],
-			),
+		const { hasFailure } = await this.provider.processBatchCreateFile(
+			fileContents.reduce<
+				{ path: ProviderPath; contents: ArrayBuffer }[]
+			>((acc, cur, idx) => {
+				if (cur.status == "rejected") {
+					obsidianFileRetrievalError(files[idx].name);
+				} else {
+					const sanitizedRemotePath = sanitizeRemotePath({
+						vaultRoot: this.settings.providerPath,
+						filePath: files[idx].path,
+					});
+					acc.push({
+						path: sanitizedRemotePath,
+						contents: cur.value,
+					});
+				}
+				return acc;
+			}, []),
 		);
+
+		// TODO: Improve error messaging
+		if (hasFailure) {
+			providerSyncError();
+		}
 	}
 
 	public async syncRemoteFiles(): Promise<void> {
@@ -348,15 +352,20 @@ export class FileSync {
 				});
 			}
 
-			const entries =
+			const { results, hasFailure } =
 				await this.provider.processBatchCreateFile(toProcess);
 
-			for (let entry of entries) {
-				this.fileMap.set(entry.path as ProviderPath, {
+			// TODO: Improve error messaging
+			if (hasFailure) {
+				providerSyncError();
+			}
+
+			for (let result of results) {
+				this.fileMap.set(result.path as ProviderPath, {
 					...(args.folderOrFile as TFile),
-					remotePath: entry.path,
-					rev: entry.rev,
-					fileHash: entry.fileHash,
+					remotePath: result.path,
+					rev: result.rev,
+					fileHash: result.fileHash,
 				});
 			}
 		}

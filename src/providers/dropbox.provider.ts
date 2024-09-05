@@ -7,21 +7,12 @@ import type {
 	CreateFileHashArgs,
 	FileHash,
 	ListFoldersAndFilesArgs,
-	ListFoldersAndFilesResult,
 	ListFoldersAndFilesResults,
-	LongopllResult,
-	LongpollArgs,
 	ProcessBatchCreateFileArgs,
 	ProcessBatchCreateFileResult,
-	ProcessBatchCreateFolderArgs,
-	ProcessBatchMoveFolderOrFileArgs,
-	ProcessBatchMoveFolderOrFileResult,
 	Provider,
-	ProviderBatchResult,
-	ProviderDeleted,
 	ProviderDeleteResult,
-	ProviderFile,
-	ProviderFolder,
+	ProviderFileResult,
 	ProviderFolderResult,
 	ProviderMoveResult,
 } from "./types";
@@ -517,68 +508,47 @@ export class DropboxProvider implements Provider {
 		return args.result[".tag"] == "complete";
 	}
 
-	downloadFile(args: { path: string }): Promise<FileMetadataExtended> {
-		const { path } = args;
-		return this.dropbox.filesDownload({ path }).then((res) => res.result);
-	}
-
-	setUserInfo(): Promise<void> {
-		return this.dropbox
-			.usersGetCurrentAccount()
-			.then((response) => {
-				this.state.account = {
-					accountId: response.result.account_id,
-					email: response.result.email,
-				};
-			})
-			.catch((_e: any) => {
-				throw new Error(DROPBOX_PROVIDER_ERRORS.resourceAccessError);
-			});
-	}
-
 	public async processBatchCreateFile(
-		args: ProcessBatchCreateFileArgs[],
-	): Promise<ProcessBatchCreateFileResult[]> {
-		const sessionIds = await this._batchCreateFileStart(args.length);
-		// If an error happens here, we still need to fire Finally to close the batch
-		const { fulfilled, rejected } = await this._batchCreateFileAppend({
+		args: { path: ProviderPath; contents: ArrayBuffer }[],
+	): Promise<{ results: ProviderFileResult[]; hasFailure: boolean }> {
+		const sessionIds = await this.batchCreateFileStart(args.length);
+		// TODO: If an error happens here, we still need to fire Finally to close the batch
+		const { fulfilled, rejected } = await this.batchCreateFileAppend({
 			files: args,
 			sessionIds,
 		});
 
-		const finishResults = await this._batchCreateFileFinish(fulfilled);
+		const batchResults = await this.batchCreateFileFinish(fulfilled);
 
-		// // TODO: Handle rejected
-		// if (rejected.length) {
-		// 	console.log("REJECTED UPDATES:", rejected);
-		// }
+		const success = batchResults.result.entries
+			.filter(
+				(
+					entry,
+				): entry is files.UploadSessionFinishBatchResultEntrySuccess =>
+					entry[".tag"] === "success",
+			)
+			.map((successEntry) => ({
+				name: successEntry.name,
+				path: successEntry.path_lower! as ProviderPath,
+				rev: successEntry.rev,
+				fileHash: successEntry.content_hash! as FileHash,
+				serverModified: successEntry.server_modified,
+			}));
 
-		const finishSuccess = finishResults.result.entries.filter(
-			(
-				entry,
-			): entry is files.UploadSessionFinishBatchResultEntrySuccess =>
-				entry[".tag"] === "success",
-		);
-		const finishFailure = finishResults.result.entries.filter(
+		const failure = batchResults.result.entries.filter(
 			(
 				entry,
 			): entry is files.UploadSessionFinishBatchResultEntryFailure =>
 				entry[".tag"] === "failure",
 		);
 
-		// TODO: Determine how to handle rejected or finishFailures
-		if (rejected.length || finishFailure.length) {
-			throw new Error("Provider Create File Error");
-		}
-
-		return finishSuccess.map((entry) => ({
-			path: entry.path_lower! as ProviderPath,
-			rev: entry.rev,
-			fileHash: entry.content_hash! as FileHash,
-		}));
+		return {
+			results: success,
+			hasFailure: failure.length > 0 || rejected.length > 0,
+		};
 	}
 
-	private _batchCreateFileStart(numSessions: number) {
+	private batchCreateFileStart(numSessions: number): Promise<string[]> {
 		return this.dropbox
 			.filesUploadSessionStartBatch({
 				num_sessions: numSessions,
@@ -586,10 +556,20 @@ export class DropboxProvider implements Provider {
 			.then((res) => res.result.session_ids);
 	}
 
-	private _batchCreateFileAppend(args: {
+	private batchCreateFileAppend(args: {
 		files: { path: string; contents: ArrayBuffer }[];
 		sessionIds: string[];
-	}) {
+	}): Promise<{
+		fulfilled: PromiseFulfilledResult<{
+			path: string;
+			cursor: {
+				offset: number;
+				session_id: string;
+			};
+			response: DropboxResponse<void>;
+		}>[];
+		rejected: PromiseRejectedResult[];
+	}> {
 		const { files, sessionIds } = args;
 		const entries = [];
 		for (let i = 0; i < files.length; i++) {
@@ -655,13 +635,13 @@ export class DropboxProvider implements Provider {
 		});
 	}
 
-	private async _batchCreateFileFinish(
+	private async batchCreateFileFinish(
 		entries: PromiseFulfilledResult<{
 			path: string;
 			cursor: { offset: number; session_id: string };
 			response: DropboxResponse<void>;
 		}>[],
-	) {
+	): Promise<DropboxResponse<files.UploadSessionFinishBatchResult>> {
 		return this.dropbox.filesUploadSessionFinishBatchV2({
 			entries: entries.map((entry) => {
 				return {
@@ -674,11 +654,30 @@ export class DropboxProvider implements Provider {
 		});
 	}
 
+	downloadFile(args: { path: string }): Promise<FileMetadataExtended> {
+		const { path } = args;
+		return this.dropbox.filesDownload({ path }).then((res) => res.result);
+	}
+
+	setUserInfo(): Promise<void> {
+		return this.dropbox
+			.usersGetCurrentAccount()
+			.then((response) => {
+				this.state.account = {
+					accountId: response.result.account_id,
+					email: response.result.email,
+				};
+			})
+			.catch((_e: any) => {
+				throw new Error(DROPBOX_PROVIDER_ERRORS.resourceAccessError);
+			});
+	}
+
 	public async updateFile(args: {
 		path: ProviderPath;
 		rev: string | undefined;
 		contents: ArrayBuffer;
-	}): Promise<ProviderFile> {
+	}): Promise<ProviderFileResult> {
 		let mode: files.WriteModeUpdate | files.WriteModeOverwrite;
 		if (args.rev) {
 			mode = {

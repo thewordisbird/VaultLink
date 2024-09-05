@@ -121,6 +121,10 @@ export interface Provider {
 		paths: ProviderPath[];
 	}): Promise<{ results: ProviderDeleteResult[]; hasFailure: boolean }>;
 
+	processBatchCreateFile(
+		args: { path: ProviderPath; contents: ArrayBuffer }[],
+	): Promise<{ results: ProviderFileResult[]; hasFailure: boolean }>;
+
 	// TODO: Type audit
 	createFileHash: (args: CreateFileHashArgs) => FileHash;
 
@@ -131,8 +135,4 @@ export interface Provider {
 	}): Promise<ProviderFileResult>;
 
 	downloadFile(args: { path: string }): Promise<FileMetadataExtended>;
-
-	processBatchCreateFile(
-		args: ProcessBatchCreateFileArgs[],
-	): Promise<ProcessBatchCreateFileResult[]>;
 }
