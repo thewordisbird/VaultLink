@@ -125,7 +125,7 @@ export class DropboxProvider implements Provider {
 		this.state = {} as DropboxState;
 	}
 
-	authorizeWithRefreshToken(refreshToken: string): void {
+	public authorizeWithRefreshToken(refreshToken: string): void {
 		this.dropboxAuth.setRefreshToken(refreshToken);
 		this.dropboxAuth.refreshAccessToken();
 	}

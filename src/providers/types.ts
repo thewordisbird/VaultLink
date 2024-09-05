@@ -101,6 +101,8 @@ export interface Provider {
 
 	revokeAuthorizationToken(): Promise<void>;
 
+	authorizeWithRefreshToken(refreshToken: string): void;
+
 	createFileHash: (args: CreateFileHashArgs) => FileHash;
 
 	listFoldersAndFiles(
