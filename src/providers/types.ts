@@ -91,6 +91,10 @@ export interface Provider {
 
 	getAuthenticationUrl(): Promise<string>;
 
+	getCodeVerifier(): string;
+
+	setCodeVerifier(codeVerifier: string): void;
+
 	createFileHash: (args: CreateFileHashArgs) => FileHash;
 
 	listFoldersAndFiles(
@@ -112,8 +116,6 @@ export interface Provider {
 	downloadFile(args: { path: string }): Promise<FileMetadataExtended>;
 
 	revokeAuthorizationToken(): Promise<void>;
-
-	getCodeVerifier(): string;
 
 	processBatchMoveFolderOrFile(
 		args: ProcessBatchMoveFolderOrFileArgs[],
