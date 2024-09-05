@@ -19,6 +19,7 @@ import type {
 	Provider,
 	ProviderBatchResult,
 	ProviderDeleted,
+	ProviderDeleteResult,
 	ProviderFile,
 	ProviderFolder,
 	ProviderFolderResult,
@@ -438,6 +439,84 @@ export class DropboxProvider implements Provider {
 		return args.result[".tag"] == "complete";
 	}
 
+	public async processBatchDeleteFolderOrFile(args: {
+		paths: ProviderPath[];
+	}): Promise<{ results: ProviderDeleteResult[]; hasFailure: boolean }> {
+		const batchResults = await this.dropbox.filesDeleteBatch({
+			entries: args.paths.map((path) => ({ path })),
+		});
+
+		if (batchResults.result[".tag"] == "complete") {
+			const success = batchResults.result.entries
+				.filter(
+					(entry): entry is files.DeleteBatchResultEntrySuccess =>
+						entry[".tag"] == "success",
+				)
+				.map((successEntry) => ({
+					name: successEntry.metadata.name,
+					path: successEntry.metadata.path_lower as ProviderPath,
+					type: successEntry.metadata[".tag"],
+				}));
+
+			return {
+				results: success,
+				hasFailure:
+					success.length != batchResults.result.entries.length,
+			};
+		} else if (batchResults.result[".tag"] == "async_job_id") {
+			const batchCheckResults = await this.batchDeleteFolderOrFileCheck({
+				asyncJobId: batchResults.result.async_job_id,
+			});
+
+			const success = batchCheckResults.result.entries
+				.filter(
+					(entry): entry is files.DeleteBatchResultEntrySuccess =>
+						entry[".tag"] == "success",
+				)
+				.map((successEntry) => ({
+					name: successEntry.metadata.name,
+					path: successEntry.metadata.path_lower as ProviderPath,
+					type: successEntry.metadata[".tag"],
+				}));
+
+			return {
+				results: success,
+				hasFailure:
+					success.length != batchCheckResults.result.entries.length,
+			};
+		} else {
+			throw new Error(
+				`Unknown ".tag" property: ${batchResults.result[".tag"]}`,
+			);
+		}
+	}
+
+	private batchDeleteFolderOrFileCheck = exponentialBackoff<
+		{ asyncJobId: string },
+		DropboxResponse<files.DeleteBatchJobStatus>,
+		DropboxResponse<files.DeleteBatchJobStatusComplete>
+	>({
+		func: this._batchDeleteFolderOrFileCheck.bind(this),
+		checkFunc: this._batchDeleteFolderOrFileCheckIsSuccess.bind(this),
+		interval: 250,
+		maxRetry: 10,
+		growthFactor: 2,
+	});
+
+	private _batchDeleteFolderOrFileCheck(args: {
+		asyncJobId: string;
+	}): Promise<DropboxResponse<files.DeleteBatchJobStatus>> {
+		return this.dropbox.filesDeleteBatchCheck({
+			async_job_id: args.asyncJobId,
+		});
+	}
+
+	private _batchDeleteFolderOrFileCheckIsSuccess(
+		args: DropboxResponse<files.RelocationBatchV2JobStatus>,
+	): boolean {
+		return args.result[".tag"] == "complete";
+	}
+
 	downloadFile(args: { path: string }): Promise<FileMetadataExtended> {
 		const { path } = args;
 		return this.dropbox.filesDownload({ path }).then((res) => res.result);
@@ -455,85 +534,6 @@ export class DropboxProvider implements Provider {
 			.catch((_e: any) => {
 				throw new Error(DROPBOX_PROVIDER_ERRORS.resourceAccessError);
 			});
-	}
-
-	public async processBatchDeleteFolderOrFile(args: {
-		paths: ProviderPath[];
-	}): Promise<ProviderBatchResult> {
-		const fileDeleteBatchResults = await this.dropbox.filesDeleteBatch({
-			entries: args.paths.map((path) => ({ path })),
-		});
-
-		if (fileDeleteBatchResults.result[".tag"] == "complete") {
-			const success = fileDeleteBatchResults.result.entries
-				.filter(
-					(entry): entry is files.DeleteBatchResultEntrySuccess =>
-						entry[".tag"] == "success",
-				)
-				.map((successEntry) => ({
-					name: successEntry.metadata.name,
-					path: successEntry.metadata.path_lower as ProviderPath,
-					type: successEntry.metadata[".tag"],
-				}));
-
-			return {
-				results: success,
-				hasFailure:
-					success.length !=
-					fileDeleteBatchResults.result.entries.length,
-			};
-		} else if (fileDeleteBatchResults.result[".tag"] == "async_job_id") {
-			const batchDeleteFolderOrFileCheckResult =
-				await this.batchDeleteFolderOrFileCheck({
-					asyncJobId: fileDeleteBatchResults.result.async_job_id,
-				});
-
-			const success = batchDeleteFolderOrFileCheckResult.result.entries
-				.filter(
-					(entry): entry is files.DeleteBatchResultEntrySuccess =>
-						entry[".tag"] == "success",
-				)
-				.map((successEntry) => ({
-					name: successEntry.metadata.name,
-					path: successEntry.metadata.path_lower as ProviderPath,
-					type: successEntry.metadata[".tag"],
-				}));
-
-			return {
-				results: success,
-				hasFailure:
-					success.length !=
-					batchDeleteFolderOrFileCheckResult.result.entries.length,
-			};
-		} else {
-			throw new Error(
-				`Unknown ".tag" property: ${fileDeleteBatchResults.result[".tag"]}`,
-			);
-		}
-	}
-
-	private batchDeleteFolderOrFileCheck = exponentialBackoff<
-		{ asyncJobId: string },
-		DropboxResponse<files.DeleteBatchJobStatus>,
-		DropboxResponse<files.DeleteBatchJobStatusComplete>
-	>({
-		func: this._batchDeleteFolderOrFileCheck.bind(this),
-		checkFunc: this._batchDeleteFolderOrFileCheckIsSuccess.bind(this),
-		interval: 250,
-		maxRetry: 10,
-		growthFactor: 2,
-	});
-
-	private _batchDeleteFolderOrFileCheck(args: { asyncJobId: string }) {
-		return this.dropbox.filesDeleteBatchCheck({
-			async_job_id: args.asyncJobId,
-		});
-	}
-
-	private _batchDeleteFolderOrFileCheckIsSuccess(
-		args: DropboxResponse<files.RelocationBatchV2JobStatus>,
-	) {
-		return args.result[".tag"] == "complete";
 	}
 
 	public async processBatchCreateFile(

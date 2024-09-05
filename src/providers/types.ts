@@ -116,6 +116,11 @@ export interface Provider {
 	processBatchMoveFolderOrFile(
 		args: { fromPath: ProviderPath; toPath: ProviderPath }[],
 	): Promise<{ results: ProviderMoveResult[]; hasFailure: boolean }>;
+
+	processBatchDeleteFolderOrFile(args: {
+		paths: ProviderPath[];
+	}): Promise<{ results: ProviderDeleteResult[]; hasFailure: boolean }>;
+
 	// TODO: Type audit
 	createFileHash: (args: CreateFileHashArgs) => FileHash;
 
@@ -130,8 +135,4 @@ export interface Provider {
 	processBatchCreateFile(
 		args: ProcessBatchCreateFileArgs[],
 	): Promise<ProcessBatchCreateFileResult[]>;
-
-	processBatchDeleteFolderOrFile(args: {
-		paths: ProviderPath[];
-	}): Promise<ProviderBatchResult>;
 }
