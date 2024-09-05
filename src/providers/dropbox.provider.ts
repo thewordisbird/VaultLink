@@ -8,6 +8,7 @@ import type {
 	FileHash,
 	ListFoldersAndFilesArgs,
 	ListFoldersAndFilesResult,
+	ListFoldersAndFilesResults,
 	LongopllResult,
 	LongpollArgs,
 	ProcessBatchCreateFileArgs,
@@ -323,7 +324,9 @@ export class DropboxProvider implements Provider {
 		return args.result[".tag"] == "complete";
 	}
 
-	public async longpoll(args: LongpollArgs): Promise<LongopllResult> {
+	public async longpoll(
+		args: LongpollArgs,
+	): Promise<ListFoldersAndFilesResults> {
 		// Uses default `timeout` arg of 30 seconds
 		const longPollResult = await this.dropbox.filesListFolderLongpoll({
 			cursor: args.cursor,
@@ -342,6 +345,7 @@ export class DropboxProvider implements Provider {
 		do {
 			const listFoldersAndFilesContinueResult =
 				await this.listFoldersAndFilesContinue({ cursor });
+
 			folders.concat(listFoldersAndFilesContinueResult.folders);
 			files.concat(listFoldersAndFilesContinueResult.files);
 			deleted.concat(listFoldersAndFilesContinueResult.deleted);

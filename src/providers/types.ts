@@ -56,7 +56,7 @@ export interface ListFoldersAndFilesArgs {
 	recursive: boolean;
 }
 
-export type ListFoldersAndFilesResult = {
+export type ListFoldersAndFilesResults = {
 	files: ProviderFile[];
 	folders: ProviderFolder[];
 	deleted: ProviderDeleted[];
@@ -67,12 +67,9 @@ export interface ListFolderAndFilesContinueArgs {
 	cursor: string;
 }
 
-export type ListFoldersAndFilesContinueResult = ListFoldersAndFilesResult & {
+export type ListFoldersAndFilesContinueResult = ListFoldersAndFilesResults & {
 	hasMore: boolean;
 };
-
-export interface LongpollArgs extends ListFolderAndFilesContinueArgs {}
-export type LongopllResult = ListFoldersAndFilesResult;
 
 export interface ProcessBatchMoveFolderOrFileArgs {
 	fromPath: ProviderPath;
@@ -104,17 +101,18 @@ export interface Provider {
 
 	authorizeWithRefreshToken(refreshToken: string): void;
 
+	longpoll(args: { cursor: string }): Promise<ListFoldersAndFilesResults>;
+
+	// TODO: Type audit
 	listFoldersAndFiles(
 		args: ListFoldersAndFilesArgs,
-	): Promise<ListFoldersAndFilesResult>;
+	): Promise<ListFoldersAndFilesResults>;
 
 	processBatchCreateFolder(args: {
 		paths: ProviderPath[];
 	}): Promise<{ results: ProviderFolder[]; hasFailure: boolean }>;
 
 	createFileHash: (args: CreateFileHashArgs) => FileHash;
-
-	longpoll(args: LongpollArgs): Promise<LongopllResult>;
 
 	updateFile(args: {
 		path: ProviderPath;
