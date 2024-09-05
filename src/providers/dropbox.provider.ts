@@ -1,7 +1,8 @@
 import { Dropbox, DropboxAuth, DropboxResponse, files } from "dropbox";
 import { dropboxContentHasher } from "./dropbox.hasher";
-import { exponentialBackoff, RemoteFilePath } from "src/utils";
+import { exponentialBackoff } from "src/utils";
 import type { Folder, ProviderPath } from "../types";
+// TODO: simplify - doesn't need to be so specific
 import type {
 	CreateFileHashArgs,
 	FileHash,
@@ -21,15 +22,13 @@ import type {
 	ProviderFolder,
 } from "./types";
 
-// TODO: All listfolder, listFiles, listFilesContinue need to consider has_more
-
-type DropboxAccount = {
+type ProviderAccount = {
 	accountId: string;
 	email: string;
 };
 
 type DropboxState = {
-	account: DropboxAccount;
+	account: ProviderAccount;
 };
 
 export interface FileMetadataExtended extends files.FileMetadata {
@@ -53,8 +52,8 @@ let instance: DropboxProvider | undefined;
 export class DropboxProvider implements Provider {
 	dropbox: Dropbox;
 	dropboxAuth: DropboxAuth;
+	// TODO: Flatten to 1d
 	state = {} as DropboxState;
-	revMap = new Map<string, string>();
 
 	static resetInstance() {
 		instance = undefined;
@@ -76,20 +75,18 @@ export class DropboxProvider implements Provider {
 	}
 
 	/* Start Authentication and Authorization */
-	getAuthenticationUrl(): Promise<String> {
-		return this.dropboxAuth
-			.getAuthenticationUrl(
-				REDIRECT_URI, // redirectUri
-				undefined, // state
-				"code", // authType
-				"offline", // tokenAccessType
-				undefined, // scope
-				undefined, // includeGrantedScopes
-				true, // usePKCE
-			)
-			.catch((_e) => {
-				throw new Error(DROPBOX_PROVIDER_ERRORS.authenticationError);
-			});
+	public async getAuthenticationUrl(): Promise<string> {
+		const authUrl = await this.dropboxAuth.getAuthenticationUrl(
+			REDIRECT_URI, // redirectUri
+			undefined, // state
+			"code", // authType
+			"offline", // tokenAccessType
+			undefined, // scope
+			undefined, // includeGrantedScopes
+			true, // usePKCE
+		);
+
+		return authUrl.toString();
 	}
 
 	get email() {

@@ -501,7 +501,6 @@ export class FileSync {
 			return sanitizedPath;
 		});
 
-		// TODO: Type fix
 		const batchDeleteResults =
 			await this.provider.processBatchDeleteFolderOrFile({
 				paths: toProcess,

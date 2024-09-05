@@ -135,12 +135,20 @@ export class SettingsTab extends PluginSettingTab {
 					});
 					if (!this.provider) return;
 
-					const authUrl = await this.provider.getAuthenticationUrl();
-					const codeVerifier = this.provider.getCodeVerifier();
+					try {
+						const authUrl =
+							await this.provider.getAuthenticationUrl();
+						const codeVerifier = this.provider.getCodeVerifier();
 
-					window.sessionStorage.clear();
-					window.sessionStorage.setItem("codeVerifier", codeVerifier);
-					window.location.href = authUrl as string;
+						window.sessionStorage.clear();
+						window.sessionStorage.setItem(
+							"codeVerifier",
+							codeVerifier,
+						);
+						window.location.href = authUrl;
+					} catch (e) {
+						providerAuthError(e);
+					}
 				});
 			});
 

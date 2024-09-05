@@ -89,6 +89,8 @@ export type ProcessBatchMoveFolderOrFileResult = {
 export interface Provider {
 	email: string;
 
+	getAuthenticationUrl(): Promise<string>;
+
 	createFileHash: (args: CreateFileHashArgs) => FileHash;
 
 	listFoldersAndFiles(
@@ -110,8 +112,6 @@ export interface Provider {
 	downloadFile(args: { path: string }): Promise<FileMetadataExtended>;
 
 	revokeAuthorizationToken(): Promise<void>;
-
-	getAuthenticationUrl(): Promise<String>;
 
 	getCodeVerifier(): string;
 
