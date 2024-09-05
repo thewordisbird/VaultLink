@@ -133,6 +133,38 @@ export class DropboxProvider implements Provider {
 	/* End Authentication and Authorization */
 
 	/* Start Folder and File Access */
+	public async longpoll(
+		args: LongpollArgs,
+	): Promise<ListFoldersAndFilesResults> {
+		// Uses default `timeout` arg of 30 seconds
+		const longPollResult = await this.dropbox.filesListFolderLongpoll({
+			cursor: args.cursor,
+		});
+
+		if (!longPollResult.result.changes) {
+			return { folders: [], files: [], deleted: [], cursor: args.cursor };
+		}
+
+		let folders: ProviderFolder[] = [];
+		let files: ProviderFile[] = [];
+		let deleted: ProviderDeleted[] = [];
+
+		let hasMore: boolean;
+		let cursor = args.cursor;
+		do {
+			const listFoldersAndFilesContinueResult =
+				await this.listFoldersAndFilesContinue({ cursor });
+
+			folders.concat(listFoldersAndFilesContinueResult.folders);
+			files.concat(listFoldersAndFilesContinueResult.files);
+			deleted.concat(listFoldersAndFilesContinueResult.deleted);
+			cursor = listFoldersAndFilesContinueResult.cursor;
+			hasMore = listFoldersAndFilesContinueResult.hasMore;
+		} while (hasMore);
+
+		return { folders, files, deleted, cursor };
+	}
+
 	public async listFoldersAndFiles(
 		args: ListFoldersAndFilesArgs,
 	): Promise<ListFoldersAndFilesResult> {
@@ -322,38 +354,6 @@ export class DropboxProvider implements Provider {
 		args: DropboxResponse<files.CreateFolderBatchJobStatus>,
 	): boolean {
 		return args.result[".tag"] == "complete";
-	}
-
-	public async longpoll(
-		args: LongpollArgs,
-	): Promise<ListFoldersAndFilesResults> {
-		// Uses default `timeout` arg of 30 seconds
-		const longPollResult = await this.dropbox.filesListFolderLongpoll({
-			cursor: args.cursor,
-		});
-
-		if (!longPollResult.result.changes) {
-			return { folders: [], files: [], deleted: [], cursor: args.cursor };
-		}
-
-		let folders: ProviderFolder[] = [];
-		let files: ProviderFile[] = [];
-		let deleted: ProviderDeleted[] = [];
-
-		let hasMore: boolean;
-		let cursor = args.cursor;
-		do {
-			const listFoldersAndFilesContinueResult =
-				await this.listFoldersAndFilesContinue({ cursor });
-
-			folders.concat(listFoldersAndFilesContinueResult.folders);
-			files.concat(listFoldersAndFilesContinueResult.files);
-			deleted.concat(listFoldersAndFilesContinueResult.deleted);
-			cursor = listFoldersAndFilesContinueResult.cursor;
-			hasMore = listFoldersAndFilesContinueResult.hasMore;
-		} while (hasMore);
-
-		return { folders, files, deleted, cursor };
 	}
 
 	downloadFile(args: { path: string }): Promise<FileMetadataExtended> {
