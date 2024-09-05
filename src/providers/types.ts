@@ -1,22 +1,10 @@
 //import type { files, DropboxResponse } from "dropbox";
 import { ProviderPath } from "src/types";
 import { FileMetadataExtended } from "./dropbox.provider";
+declare const __brand: unique symbol;
 
-// files: files.map((file) => ({
-// 	name: file.name,
-// 	path: file.path_lower as ProviderPath,
-// 	rev: file.rev,
-// 	fileHash: file.content_hash as FileHash,
-// 	serverModified: file.server_modified,
-// })),
-// folders: folders.map((folder) => ({
-// 	name: folder.name,
-// 	path: folder.path_lower as ProviderPath,
-// })),
-// deleted: deleted.map((deletedResource) => ({
-// 	name: deletedResource.name,
-// 	path: deletedResource.path_lower as ProviderPath,
-// })),
+export type FileHash = string & { [__brand]: "file hash" };
+
 export type ProviderFile = {
 	name: string;
 	path: ProviderPath;
@@ -33,6 +21,34 @@ export type ProviderFolder = {
 export type ProviderDeleted = {
 	name: string;
 	path: ProviderPath;
+};
+
+export type ProviderBatchResult = {
+	results: {
+		name: string;
+		path: ProviderPath;
+		type: "file" | "folder" | "deleted";
+	}[];
+	hasFailure: boolean;
+};
+
+export interface CreateFileHashArgs {
+	contents: ArrayBuffer;
+}
+
+export interface ProcessBatchCreateFolderArgs {
+	paths: string[];
+}
+
+export interface ProcessBatchCreateFileArgs {
+	path: string;
+	contents: ArrayBuffer;
+}
+
+export type ProcessBatchCreateFileResult = {
+	path: ProviderPath;
+	rev: string;
+	fileHash: FileHash;
 };
 
 export interface ListFoldersAndFilesArgs {
@@ -69,10 +85,11 @@ export type ProcessBatchMoveFolderOrFileResult = {
 	}[];
 	hasFailure: boolean;
 };
+
 export interface Provider {
 	email: string;
 
-	createFileHash: (args: { fileData: ArrayBuffer }) => FileHash;
+	createFileHash: (args: CreateFileHashArgs) => FileHash;
 
 	listFoldersAndFiles(
 		args: ListFoldersAndFilesArgs,
@@ -85,8 +102,7 @@ export interface Provider {
 	longpoll(args: LongpollArgs): Promise<LongopllResult>;
 
 	updateFile(args: {
-		//TODO: paths should be FilePath
-		path: string;
+		path: ProviderPath;
 		rev: string | undefined;
 		contents: ArrayBuffer;
 	}): Promise<ProviderFile>;
@@ -109,26 +125,7 @@ export interface Provider {
 
 	processBatchCreateFolder(args: ProcessBatchCreateFolderArgs): Promise<void>;
 
-	processBatchDeleteFolderOfFile(args: {
-		paths: string[];
-	}): Promise<files.DeleteBatchResultEntry[]>;
+	processBatchDeleteFolderOrFile(args: {
+		paths: ProviderPath[];
+	}): Promise<ProviderBatchResult>;
 }
-
-declare const __brand: unique symbol;
-
-export type FileHash = string & { [__brand]: "file hash" };
-
-export interface ProcessBatchCreateFolderArgs {
-	paths: string[];
-}
-
-export interface ProcessBatchCreateFileArgs {
-	path: string;
-	contents: ArrayBuffer;
-}
-
-export type ProcessBatchCreateFileResult = {
-	path: ProviderPath;
-	rev: string;
-	fileHash: FileHash;
-};

@@ -71,7 +71,7 @@ export class FileSync {
 
 			const fileHash = this.provider.createFileHash(
 				// @ts-ignore (typesript bug - not type narroring)
-				{ fileData: fileContents[i].value },
+				{ contents: fileContents[i].value },
 			);
 
 			const sanitizedRemotePath = sanitizeRemotePath({
@@ -502,19 +502,17 @@ export class FileSync {
 		});
 
 		// TODO: Type fix
-		const entries = await this.provider.processBatchDeleteFolderOfFile({
-			paths: toProcess,
-		});
+		const batchDeleteResults =
+			await this.provider.processBatchDeleteFolderOrFile({
+				paths: toProcess,
+			});
 
-		for (let entry of entries) {
-			if (entry[".tag"] == "failure") {
-				providerSyncError();
-				continue;
-			}
+		if (batchDeleteResults.hasFailure) {
+			providerSyncError();
+		}
 
-			if (entry[".tag"] == "success") {
-				this.fileMap.delete(entry.metadata.path_lower as ProviderPath);
-			}
+		for (let result of batchDeleteResults.results) {
+			this.fileMap.delete(result.path);
 		}
 	}
 
