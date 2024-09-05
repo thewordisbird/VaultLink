@@ -5,7 +5,7 @@ declare const __brand: unique symbol;
 
 export type FileHash = string & { [__brand]: "file hash" };
 
-export type ProviderFile = {
+export type ProviderFileResult = {
 	name: string;
 	path: ProviderPath;
 	rev: string;
@@ -13,14 +13,20 @@ export type ProviderFile = {
 	serverModified: string; // TODO: Should this be converted to a date?
 };
 
-export type ProviderFolder = {
+export type ProviderFolderResult = {
 	name: string;
 	path: ProviderPath;
 };
 
-export type ProviderDeleted = {
+export type ProviderDeleteResult = {
 	name: string;
 	path: ProviderPath;
+};
+
+export type ProviderMoveResult = {
+	name: string;
+	path: ProviderPath;
+	type: "file" | "folder" | "deleted";
 };
 
 export type ProviderBatchResult = {
@@ -57,9 +63,9 @@ export interface ListFoldersAndFilesArgs {
 }
 
 export type ListFoldersAndFilesResults = {
-	files: ProviderFile[];
-	folders: ProviderFolder[];
-	deleted: ProviderDeleted[];
+	files: ProviderFileResult[];
+	folders: ProviderFolderResult[];
+	deleted: ProviderDeleteResult[];
 	cursor: string;
 };
 
@@ -71,10 +77,6 @@ export type ListFoldersAndFilesContinueResult = ListFoldersAndFilesResults & {
 	hasMore: boolean;
 };
 
-export interface ProcessBatchMoveFolderOrFileArgs {
-	fromPath: ProviderPath;
-	toPath: ProviderPath;
-}
 export type ProcessBatchMoveFolderOrFileResult = {
 	results: {
 		name: string;
@@ -103,28 +105,27 @@ export interface Provider {
 
 	longpoll(args: { cursor: string }): Promise<ListFoldersAndFilesResults>;
 
-	// TODO: Type audit
 	listFoldersAndFiles(
 		args: ListFoldersAndFilesArgs,
 	): Promise<ListFoldersAndFilesResults>;
 
 	processBatchCreateFolder(args: {
 		paths: ProviderPath[];
-	}): Promise<{ results: ProviderFolder[]; hasFailure: boolean }>;
+	}): Promise<{ results: ProviderFolderResult[]; hasFailure: boolean }>;
 
+	processBatchMoveFolderOrFile(
+		args: { fromPath: ProviderPath; toPath: ProviderPath }[],
+	): Promise<{ results: ProviderMoveResult[]; hasFailure: boolean }>;
+	// TODO: Type audit
 	createFileHash: (args: CreateFileHashArgs) => FileHash;
 
 	updateFile(args: {
 		path: ProviderPath;
 		rev: string | undefined;
 		contents: ArrayBuffer;
-	}): Promise<ProviderFile>;
+	}): Promise<ProviderFileResult>;
 
 	downloadFile(args: { path: string }): Promise<FileMetadataExtended>;
-
-	processBatchMoveFolderOrFile(
-		args: ProcessBatchMoveFolderOrFileArgs[],
-	): Promise<ProcessBatchMoveFolderOrFileResult>;
 
 	processBatchCreateFile(
 		args: ProcessBatchCreateFileArgs[],
