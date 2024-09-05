@@ -74,6 +74,10 @@ export class DropboxProvider implements Provider {
 		return instance;
 	}
 
+	get email(): string {
+		return this.state.account?.email;
+	}
+
 	/* Start Authentication and Authorization */
 	public async getAuthenticationUrl(): Promise<string> {
 		const authUrl = await this.dropboxAuth.getAuthenticationUrl(
@@ -87,10 +91,6 @@ export class DropboxProvider implements Provider {
 		);
 
 		return authUrl.toString();
-	}
-
-	get email() {
-		return this.state.account?.email;
 	}
 
 	getCodeVerifier(): string {
