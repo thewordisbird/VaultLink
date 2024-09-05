@@ -129,13 +129,6 @@ export class DropboxProvider implements Provider {
 		this.dropboxAuth.setRefreshToken(refreshToken);
 		this.dropboxAuth.refreshAccessToken();
 	}
-
-	getAuthorizationState(): Promise<boolean> {
-		return this.dropbox
-			.checkUser({})
-			.then(() => true)
-			.catch(() => false);
-	}
 	/* End Authentication and Authorization */
 
 	listFolders(root = ""): Promise<Folder[]> {
