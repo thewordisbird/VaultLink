@@ -131,48 +131,13 @@ export class DropboxProvider implements Provider {
 	}
 	/* End Authentication and Authorization */
 
-	listFolders(root = ""): Promise<Folder[]> {
-		return this.dropbox
-			.filesListFolder({ path: root })
-			.then((res) => {
-				return res.result.entries
-					.filter((entry) => entry[".tag"] === "folder")
-					.map((folder) => {
-						return {
-							name: folder.name,
-							path: folder.path_lower,
-							displayPath: folder.path_display,
-						} as Folder;
-					});
-			})
-			.catch((e: any) => {
-				console.error("listFolders error:", e);
-				throw new Error(DROPBOX_PROVIDER_ERRORS.resourceAccessError);
-			});
-	}
-
-	// TODO: change this to 'createFolder' to be consistent with the rest of the api.
-	addFolder(path: string) {
-		return new Promise<void>((resolve, reject) => {
-			this.dropbox
-				.filesCreateFolderV2({ path })
-				.then(function () {
-					resolve();
-				})
-				.catch(function () {
-					reject(
-						new Error(DROPBOX_PROVIDER_ERRORS.resourceAccessError),
-					);
-				});
-		});
-	}
-
+	/* Start Folder and File Access */
 	public async listFoldersAndFiles(
 		args: ListFoldersAndFilesArgs,
 	): Promise<ListFoldersAndFilesResult> {
 		let filesListFolderResult = await this.dropbox.filesListFolder({
 			path: args.vaultRoot,
-			recursive: true,
+			recursive: args.recursive,
 		});
 		let files = filesListFolderResult.result.entries
 			.filter(
@@ -229,7 +194,7 @@ export class DropboxProvider implements Provider {
 		};
 	}
 
-	async listFoldersAndFilesContinue(args: { cursor: string }) {
+	private async listFoldersAndFilesContinue(args: { cursor: string }) {
 		const filesListFolderContinueResult =
 			await this.dropbox.filesListFolderContinue({ cursor: args.cursor });
 
@@ -276,6 +241,22 @@ export class DropboxProvider implements Provider {
 			hasMore,
 			cursor,
 		};
+	}
+
+	// TODO: change this to 'createFolder' to be consistent with the rest of the api.
+	addFolder(path: string) {
+		return new Promise<void>((resolve, reject) => {
+			this.dropbox
+				.filesCreateFolderV2({ path })
+				.then(function () {
+					resolve();
+				})
+				.catch(function () {
+					reject(
+						new Error(DROPBOX_PROVIDER_ERRORS.resourceAccessError),
+					);
+				});
+		});
 	}
 
 	public async longpoll(args: LongpollArgs): Promise<LongopllResult> {

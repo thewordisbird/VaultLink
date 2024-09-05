@@ -139,6 +139,7 @@ export class FileSync {
 		let { folders, files, deleted, cursor } =
 			await this.provider.listFoldersAndFiles({
 				vaultRoot: this.settings.providerPath!,
+				recursive: true,
 			});
 
 		await this.syncFiles({ folders, files, deleted });

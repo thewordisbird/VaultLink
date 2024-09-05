@@ -53,6 +53,7 @@ export type ProcessBatchCreateFileResult = {
 
 export interface ListFoldersAndFilesArgs {
 	vaultRoot: ProviderPath;
+	recursive: boolean;
 }
 
 export type ListFoldersAndFilesResult = {
