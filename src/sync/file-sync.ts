@@ -1,9 +1,6 @@
 import { App, TAbstractFile, TFile, TFolder } from "obsidian";
-import {
-	batch,
-	convertRemoteToClientPath,
-	sanitizeRemotePath,
-} from "src/utils";
+import { batch } from "../../lib/batch";
+import { convertRemoteToClientPath, sanitizeRemotePath } from "src/utils";
 import {
 	obsidianFileRetrievalError,
 	providerSyncError,
