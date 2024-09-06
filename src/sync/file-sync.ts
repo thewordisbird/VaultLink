@@ -92,17 +92,18 @@ export class FileSync {
 
 		const foldersAndFiles = this.obsidianApp.vault.getAllLoadedFiles();
 
-		const folders = foldersAndFiles
-			.filter(
-				(folderOrFile): folderOrFile is TFolder =>
-					folderOrFile instanceof TFolder,
-			)
-			.map((folder) => {
-				return sanitizeRemotePath({
-					vaultRoot: this.settings.providerPath,
-					filePath: folder.path,
-				});
-			});
+		// TODO: Sync empty folder
+		// const folders = foldersAndFiles
+		// 	.filter(
+		// 		(folderOrFile): folderOrFile is TFolder =>
+		// 			folderOrFile instanceof TFolder,
+		// 	)
+		// 	.map((folder) => {
+		// 		return sanitizeRemotePath({
+		// 			vaultRoot: this.settings.providerPath,
+		// 			filePath: folder.path,
+		// 		});
+		// 	});
 
 		const files = foldersAndFiles.filter(
 			(folderOrFile): folderOrFile is TFile => {
@@ -117,15 +118,6 @@ export class FileSync {
 				return this.fileMap!.get(providerPath)!.rev == undefined;
 			},
 		);
-		// let files: TFile[] = [];
-		// for (let fileData of this.fileMap.values()) {
-		// 	if (fileData.rev) continue;
-		//
-		// 	const file = this.obsidianApp.vault.getFileByPath(fileData.path);
-		// 	if (!file) continue;
-		//
-		// 	files.push(file);
-		// }
 
 		const fileContents = await Promise.allSettled(
 			files.map((file) => this.obsidianApp.vault.readBinary(file)),
@@ -154,11 +146,11 @@ export class FileSync {
 				}, []),
 			);
 
-		const { hasFailure: folderHasFailure } =
-			await this.provider.processBatchCreateFolder({ paths: folders });
+		// const { hasFailure: folderHasFailure } =
+		// 	await this.provider.processBatchCreateFolder({ paths: folders });
 
 		// TODO: Improve error messaging
-		if (fileHasFailure || folderHasFailure) {
+		if (fileHasFailure) {
 			providerSyncError();
 		}
 	}
