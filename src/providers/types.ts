@@ -1,5 +1,4 @@
 import { ProviderPath } from "src/types";
-import { FileMetadataExtended } from "./dropbox.provider";
 declare const __brand: unique symbol;
 
 export type FileHash = string & { [__brand]: "file hash" };

@@ -1,10 +1,11 @@
 import { useReducer, useEffect } from "react";
+import { ProviderFolderResult } from "src/providers/types";
 import { DropboxProvider } from "../providers/dropbox.provider";
-import type { Folder, ProviderPath } from "../types";
+import type { ProviderPath } from "../types";
 
 type State = {
 	path: string[];
-	folders: Folder[];
+	folders: ProviderFolderResult[];
 	isAddFolderDisplayed: boolean;
 	isLoading: boolean;
 };
@@ -15,7 +16,7 @@ type Action =
 	| {
 			type: "SET_FOLDERS";
 			payload: {
-				folders: Folder[];
+				folders: ProviderFolderResult[];
 			};
 	  }
 	| { type: "ADD_FOLDER"; payload: { folderName: string } }
