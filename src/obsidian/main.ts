@@ -1,17 +1,18 @@
 import { EventRef, Plugin, TAbstractFile } from "obsidian";
-import { DEFAULT_SETTINGS, SettingsTab } from "./settings";
-import { DropboxProvider } from ".././providers/dropbox.provider";
 import { PubSub } from "../../lib/pubsub";
-import { FileSync } from "src/sync/file-sync";
-import type { PluginSettings } from "./settings";
-import { ClientPath, ProviderPath, PubsubTopic } from "../types";
+import { DEFAULT_SETTINGS, SettingsTab } from "./settings";
 import {
 	providerLongpollError,
 	providerMoveFolderOrFileError,
 	providerSyncError,
 } from "./notice";
+import { DropboxProvider } from "../providers/dropbox.provider";
+import { FileSync } from "../sync/file-sync";
 
-// TODO: Define this type - should not bring dropbox contents into this file
+import { PubsubTopic } from "../types";
+import type { ClientPath, ProviderPath } from "../types";
+import type { PluginSettings } from "./settings";
+
 const LONGPOLL_FREQUENCY = 30000;
 
 export default class VaultLink extends Plugin {
@@ -19,7 +20,6 @@ export default class VaultLink extends Plugin {
 	public settings: PluginSettings;
 
 	private longpollIntervalId: number | undefined;
-
 	private handleCreateEventRef: EventRef | undefined;
 	private handleModifyEventRef: EventRef | undefined;
 	private handleRenameEventRef: EventRef | undefined;

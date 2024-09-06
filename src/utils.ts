@@ -123,11 +123,6 @@ export function exponentialBackoff<I, R, S>(args: {
 	};
 }
 
-declare const __brand: unique symbol;
-
-export type ClientFilePath = string & { [__brand]: "client path" };
-export type RemoteFilePath = string & { [__brand]: "remote path" };
-
 export function sanitizeRemotePath(args: {
 	vaultRoot?: string;
 	filePath: string;
@@ -139,19 +134,9 @@ export function sanitizeRemotePath(args: {
 	return `${args.vaultRoot}/${args.filePath}`.toLowerCase() as ProviderPath;
 }
 
-export function sanitizeClientPath(args: { filePath: string }): ClientFilePath {
-	return args.filePath.toLowerCase() as ClientFilePath;
-}
-
-export function convertClientToRemotePath(args: {
-	clientPath: ClientFilePath;
-}): RemoteFilePath {
-	return ("/" + args.clientPath) as RemoteFilePath;
-}
-
 export function convertRemoteToClientPath(args: {
+	vaultRoot: ProviderPath;
 	remotePath: ProviderPath;
 }): ClientPath {
-	return args.remotePath.split("/").slice(4).join("/") as ClientPath;
-	//return args.remotePath.slice(1) as ClientFilePath;
+	return args.remotePath.slice(args.vaultRoot.length + 1) as ClientPath;
 }

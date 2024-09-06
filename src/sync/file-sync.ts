@@ -12,9 +12,9 @@ import type { PluginSettings } from "src/obsidian/settings";
 import type {
 	FileHash,
 	Provider,
-	ProviderDeleted,
-	ProviderFile,
-	ProviderFolder,
+	ProviderDeleteResult,
+	ProviderFileResult,
+	ProviderFolderResult,
 } from "src/providers/types";
 import { ProviderPath } from "src/types";
 
@@ -146,7 +146,7 @@ export class FileSync {
 				recursive: true,
 			});
 
-		await this.syncFiles({ folders, files, deleted });
+		const result = await this.syncFiles({ folders, files, deleted });
 		this.cursor = cursor;
 	}
 
@@ -165,78 +165,66 @@ export class FileSync {
 		this.cursor = cursor;
 	}
 
-	private syncFiles(args: {
-		folders: ProviderFolder[];
-		files: ProviderFile[];
-		deleted: ProviderDeleted[];
+	private async syncFiles(args: {
+		folders: ProviderFolderResult[];
+		files: ProviderFileResult[];
+		deleted: ProviderDeleteResult[];
 	}) {
 		if (!this.fileMap) {
 			throw new Error("Sync Error: fileMap not initialized");
 		}
-
-		const sync = [];
-
-		sync.push(
-			Promise.allSettled(
-				args.deleted.map((providerDeleted) =>
-					this.syncFile({
-						providerDeleted,
-						clientFileMetadata: this.fileMap?.get(
-							providerDeleted.path,
-						),
-					}),
-				),
-			),
-		);
-		sync.push(
-			Promise.allSettled(
-				args.files.map((providerFile) =>
-					this.syncFile({
-						providerFile,
-						clientFileMetadata: this.fileMap?.get(
-							providerFile.path,
-						),
-					}),
-				),
-			),
-		);
-		sync.push(
-			Promise.allSettled(
-				args.folders.map((providerFolder) =>
-					this.syncFile({ providerFolder }),
-				),
+		const deleted = Promise.allSettled(
+			args.deleted.map((providerDeleted) =>
+				this.syncFile({
+					providerDeleted,
+					clientFileMetadata: this.fileMap?.get(providerDeleted.path),
+				}),
 			),
 		);
 
-		return Promise.allSettled(sync);
+		const files = Promise.allSettled(
+			args.files.map((providerFile) =>
+				this.syncFile({
+					providerFile,
+					clientFileMetadata: this.fileMap?.get(providerFile.path),
+				}),
+			),
+		);
+
+		const folders = Promise.allSettled(
+			args.folders.map((providerFolder) =>
+				this.syncFile({ providerFolder }),
+			),
+		);
+		return Promise.allSettled([folders, files, deleted]);
 	}
 
 	private async syncFile(args: {
-		providerFolder: ProviderFolder;
+		providerFolder: ProviderFolderResult;
 	}): Promise<void>;
 	private async syncFile(args: {
-		providerDeleted: ProviderDeleted;
+		providerDeleted: ProviderDeleteResult;
 		clientFileMetadata: FileSyncMetadata | undefined;
 	}): Promise<void>;
 	private async syncFile(args: {
-		providerFile: ProviderFile;
+		providerFile: ProviderFileResult;
 		clientFileMetadata: FileSyncMetadata | undefined;
 	}): Promise<void>;
 	private async syncFile(args: {
-		providerDeleted?: ProviderDeleted;
-		providerFile?: ProviderFile;
-		providerFolder?: ProviderFolder;
+		providerDeleted?: ProviderDeleteResult;
+		providerFile?: ProviderFileResult;
+		providerFolder?: ProviderFolderResult;
 		clientFileMetadata?: FileSyncMetadata | undefined;
 	}): Promise<void> {
 		if (args.providerDeleted) {
-			return this.reconcileDeletedOnServer({
+			await this.reconcileDeletedOnServer({
 				clientFileMetadata: args.clientFileMetadata,
 				providerDeleted: args.providerDeleted,
 			});
 		}
 
 		if (args.providerFolder) {
-			return this.reconcileRemoteAheadFolder({
+			await this.reconcileRemoteAheadFolder({
 				providerFolder: args.providerFolder,
 			});
 		}
@@ -252,12 +240,12 @@ export class FileSync {
 					args.clientFileMetadata!.rev = args.providerFile.rev;
 					break;
 				case SyncStatus.clientAhead:
-					this.reconcileClientAhead({
+					await this.reconcileClientAhead({
 						clientFileMetadata: args.clientFileMetadata!,
 					});
 					break;
 				case SyncStatus.remoteAhead:
-					this.reconcileRemoteAhead({
+					await this.reconcileRemoteAhead({
 						clientFileMetadata: args.clientFileMetadata!,
 					});
 					break;
@@ -274,7 +262,7 @@ export class FileSync {
 
 	private getSyncStatus(args: {
 		clientFileMetadata: FileSyncMetadata | undefined;
-		providerFile: ProviderFile;
+		providerFile: ProviderFileResult;
 	}): SyncStatus {
 		if (args.clientFileMetadata == undefined) {
 			return SyncStatus.clientNotFound;
@@ -529,13 +517,14 @@ export class FileSync {
 
 	private async reconcileDeletedOnServer(args: {
 		clientFileMetadata: FileSyncMetadata | undefined;
-		providerDeleted: ProviderDeleted;
+		providerDeleted: ProviderDeleteResult;
 	}) {
 		if (!this.fileMap) {
 			throw new Error("Sync Error: fileMap not initialized");
 		}
 
 		const sanitizedClientPath = convertRemoteToClientPath({
+			vaultRoot: this.settings.providerPath!,
 			remotePath: args.providerDeleted.path,
 		});
 
@@ -606,28 +595,27 @@ export class FileSync {
 			args.clientFileMetadata.path,
 		);
 
-		const remoteFileContents = await this.provider.downloadFile({
-			path: args.clientFileMetadata.remotePath,
-		});
+		const { contents, serverModified, fileHash, rev } =
+			await this.provider.downloadFile({
+				path: args.clientFileMetadata.remotePath,
+			});
 
-		if (!clientFile || !remoteFileContents)
+		if (!clientFile || !contents)
 			throw new Error("Error: reconcileRemoteAhead Error");
 
-		await this.obsidianApp.vault.modifyBinary(
-			clientFile,
-			await remoteFileContents.fileBlob!.arrayBuffer(),
-			{ mtime: new Date(remoteFileContents.server_modified).valueOf() },
-		);
+		await this.obsidianApp.vault.modifyBinary(clientFile, contents, {
+			mtime: new Date(serverModified).valueOf(),
+		});
 
-		args.clientFileMetadata.rev = remoteFileContents.rev;
-		args.clientFileMetadata.fileHash =
-			remoteFileContents.content_hash! as FileHash;
+		args.clientFileMetadata.rev = rev;
+		args.clientFileMetadata.fileHash = fileHash;
 	}
 
 	private async reconcileRemoteAheadFolder(args: {
-		providerFolder: ProviderFolder;
+		providerFolder: ProviderFolderResult;
 	}): Promise<void> {
 		const sanitizedClientPath = convertRemoteToClientPath({
+			vaultRoot: this.settings.providerPath!,
 			remotePath: args.providerFolder.path,
 		});
 
@@ -639,33 +627,35 @@ export class FileSync {
 	}
 
 	private async reconcileClientNotFound(args: {
-		providerFile: ProviderFile;
+		providerFile: ProviderFileResult;
 	}) {
 		if (!this.fileMap) {
 			throw new Error("Sync Error: fileMap not initialized");
 		}
 
-		// TODO: Update typing for provider.downloadFile
-		const providerFileContents = await this.provider.downloadFile({
-			path: args.providerFile.path,
-		});
+		const { contents, serverModified, path, fileHash, rev } =
+			await this.provider.downloadFile({
+				path: args.providerFile.path,
+			});
 
 		const sanitizedClientPath = convertRemoteToClientPath({
+			vaultRoot: this.settings.providerPath!,
 			remotePath: args.providerFile.path,
 		});
 
 		const clientFileMetadata = await this.obsidianApp.vault.createBinary(
 			sanitizedClientPath,
-			await providerFileContents.fileBlob!.arrayBuffer(),
+			contents,
 			{
-				mtime: new Date(providerFileContents.server_modified).valueOf(),
+				mtime: new Date(serverModified).valueOf(),
 			},
 		);
+
 		this.fileMap.set(args.providerFile.path, {
 			...clientFileMetadata,
-			remotePath: args.providerFile.path,
-			fileHash: providerFileContents.content_hash as FileHash,
-			rev: providerFileContents.rev,
+			remotePath: path,
+			fileHash,
+			rev,
 		});
 	}
 }

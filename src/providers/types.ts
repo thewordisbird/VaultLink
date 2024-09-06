@@ -1,4 +1,3 @@
-//import type { files, DropboxResponse } from "dropbox";
 import { ProviderPath } from "src/types";
 import { FileMetadataExtended } from "./dropbox.provider";
 declare const __brand: unique symbol;
@@ -11,6 +10,10 @@ export type ProviderFileResult = {
 	rev: string;
 	fileHash: FileHash;
 	serverModified: string; // TODO: Should this be converted to a date?
+};
+
+export type ProviderFileContentsResult = ProviderFileResult & {
+	contents: ArrayBuffer;
 };
 
 export type ProviderFolderResult = {
@@ -117,6 +120,8 @@ export interface Provider {
 	): Promise<{ results: ProviderFileResult[]; hasFailure: boolean }>;
 
 	createFileHash: (args: { contents: ArrayBuffer }) => FileHash;
+
+	downloadFile(args: { path: string }): Promise<ProviderFileContentsResult>;
 	// TODO: Type audit
 
 	updateFile(args: {
@@ -124,6 +129,4 @@ export interface Provider {
 		rev: string | undefined;
 		contents: ArrayBuffer;
 	}): Promise<ProviderFileResult>;
-
-	downloadFile(args: { path: string }): Promise<FileMetadataExtended>;
 }

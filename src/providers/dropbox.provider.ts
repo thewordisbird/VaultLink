@@ -9,6 +9,7 @@ import type {
 	ListFoldersAndFilesResults,
 	Provider,
 	ProviderDeleteResult,
+	ProviderFileContentsResult,
 	ProviderFileResult,
 	ProviderFolderResult,
 	ProviderMoveResult,
@@ -124,9 +125,9 @@ export class DropboxProvider implements Provider {
 	/* End Authentication and Authorization */
 
 	/* Start Folder and File Access */
-	public async longpoll(
-		args: LongpollArgs,
-	): Promise<ListFoldersAndFilesResults> {
+	public async longpoll(args: {
+		cursor: string;
+	}): Promise<ListFoldersAndFilesResults> {
 		// Uses default `timeout` arg of 30 seconds
 		const longPollResult = await this.dropbox.filesListFolderLongpoll({
 			cursor: args.cursor,
@@ -136,9 +137,9 @@ export class DropboxProvider implements Provider {
 			return { folders: [], files: [], deleted: [], cursor: args.cursor };
 		}
 
-		let folders: ProviderFolder[] = [];
-		let files: ProviderFile[] = [];
-		let deleted: ProviderDeleted[] = [];
+		let folders: ProviderFolderResult[] = [];
+		let files: ProviderFileResult[] = [];
+		let deleted: ProviderDeleteResult[] = [];
 
 		let hasMore: boolean;
 		let cursor = args.cursor;
@@ -146,9 +147,9 @@ export class DropboxProvider implements Provider {
 			const listFoldersAndFilesContinueResult =
 				await this.listFoldersAndFilesContinue({ cursor });
 
-			folders.concat(listFoldersAndFilesContinueResult.folders);
-			files.concat(listFoldersAndFilesContinueResult.files);
-			deleted.concat(listFoldersAndFilesContinueResult.deleted);
+			folders.push(...listFoldersAndFilesContinueResult.folders);
+			files.push(...listFoldersAndFilesContinueResult.files);
+			deleted.push(...listFoldersAndFilesContinueResult.deleted);
 			cursor = listFoldersAndFilesContinueResult.cursor;
 			hasMore = listFoldersAndFilesContinueResult.hasMore;
 		} while (hasMore);
@@ -158,7 +159,7 @@ export class DropboxProvider implements Provider {
 
 	public async listFoldersAndFiles(
 		args: ListFoldersAndFilesArgs,
-	): Promise<ListFoldersAndFilesResult> {
+	): Promise<ListFoldersAndFilesResults> {
 		let filesListFolderResult = await this.dropbox.filesListFolder({
 			path: args.vaultRoot,
 			recursive: args.recursive,
@@ -202,9 +203,9 @@ export class DropboxProvider implements Provider {
 		while (hasMore) {
 			const listFolderAndFilesContinueResilt =
 				await this.listFoldersAndFilesContinue({ cursor });
-			files.concat(listFolderAndFilesContinueResilt.files);
-			folders.concat(listFolderAndFilesContinueResilt.folders);
-			deleted.concat(listFolderAndFilesContinueResilt.deleted);
+			files.push(...listFolderAndFilesContinueResilt.files);
+			folders.push(...listFolderAndFilesContinueResilt.folders);
+			deleted.push(...listFolderAndFilesContinueResilt.deleted);
 
 			cursor = listFolderAndFilesContinueResilt.cursor;
 			hasMore = listFolderAndFilesContinueResilt.hasMore;
@@ -655,9 +656,22 @@ export class DropboxProvider implements Provider {
 		return dropboxContentHasher(args.contents) as FileHash;
 	}
 
-	downloadFile(args: { path: string }): Promise<FileMetadataExtended> {
-		const { path } = args;
-		return this.dropbox.filesDownload({ path }).then((res) => res.result);
+	public async downloadFile(args: {
+		path: string;
+	}): Promise<ProviderFileContentsResult> {
+		const { result } = await this.dropbox.filesDownload({
+			path: args.path,
+		});
+		// @ts-ignore
+		const contents = await result.fileBlob!.arrayBuffer();
+		return {
+			name: result.name,
+			path: result.path_lower as ProviderPath,
+			rev: result.rev,
+			fileHash: result.content_hash as FileHash,
+			serverModified: result.server_modified,
+			contents,
+		};
 	}
 
 	setUserInfo(): Promise<void> {
