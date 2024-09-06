@@ -122,7 +122,8 @@ export interface Provider {
 	createFileHash: (args: { contents: ArrayBuffer }) => FileHash;
 
 	downloadFile(args: { path: string }): Promise<ProviderFileContentsResult>;
-	// TODO: Type audit
+
+	setUserInfo(): Promise<void>;
 
 	updateFile(args: {
 		path: ProviderPath;

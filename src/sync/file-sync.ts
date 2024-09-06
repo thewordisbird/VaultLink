@@ -575,7 +575,6 @@ export class FileSync {
 			clientFile!,
 		);
 
-		// TODO: type fix
 		const updateFileResults = await this.provider.updateFile({
 			path: clientFileMetadata.remotePath,
 			rev: clientFileMetadata.rev || undefined,
