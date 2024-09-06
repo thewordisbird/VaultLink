@@ -1,6 +1,6 @@
 import { Dropbox, DropboxAuth, DropboxResponse, files } from "dropbox";
+import { exponentialBackoff } from "../../lib/exponential-backoff";
 import { dropboxContentHasher } from "./dropbox.hasher";
-import { exponentialBackoff } from "src/utils";
 import type { ProviderPath } from "../types";
 import type {
 	FileHash,
