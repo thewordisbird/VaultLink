@@ -1,6 +1,11 @@
 import { ProviderPath } from "src/types";
 declare const __brand: unique symbol;
 
+export type ProviderState = {
+	accountId: string | undefined;
+	email: string | undefined;
+};
+
 export type FileHash = string & { [__brand]: "file hash" };
 
 export type ProviderFileResult = {

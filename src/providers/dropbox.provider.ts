@@ -12,16 +12,8 @@ import type {
 	ProviderFileResult,
 	ProviderFolderResult,
 	ProviderMoveResult,
+	ProviderState,
 } from "./types";
-
-type ProviderAccount = {
-	accountId: string;
-	email: string;
-};
-
-type DropboxState = {
-	account: ProviderAccount;
-};
 
 const BATCH_DELAY_TIME = 250;
 const MAX_RETRY = 10;
@@ -33,10 +25,12 @@ export const CLIENT_ID = "vofawt4jgywrgey";
 let instance: DropboxProvider | undefined;
 
 export class DropboxProvider implements Provider {
-	dropbox: Dropbox;
-	dropboxAuth: DropboxAuth;
-	// TODO: Flatten to 1d
-	state = {} as DropboxState;
+	private dropbox: Dropbox;
+	private dropboxAuth: DropboxAuth;
+	private state: ProviderState = {
+		accountId: undefined,
+		email: undefined,
+	};
 
 	static resetInstance() {
 		instance = undefined;
@@ -58,7 +52,7 @@ export class DropboxProvider implements Provider {
 	}
 
 	get email(): string {
-		return this.state.account?.email;
+		return this.state.email || "";
 	}
 
 	/* Start Authentication and Authorization */
@@ -105,7 +99,8 @@ export class DropboxProvider implements Provider {
 
 	public async revokeAuthorizationToken(): Promise<void> {
 		await this.dropbox.authTokenRevoke();
-		this.state = {} as DropboxState;
+		this.state.email = undefined;
+		this.state.accountId = undefined;
 	}
 
 	public authorizeWithRefreshToken(refreshToken: string): void {
@@ -666,11 +661,8 @@ export class DropboxProvider implements Provider {
 
 	public async setUserInfo(): Promise<void> {
 		const userInfo = await this.dropbox.usersGetCurrentAccount();
-
-		this.state.account = {
-			accountId: userInfo.result.account_id,
-			email: userInfo.result.email,
-		};
+		this.state.accountId = userInfo.result.account_id;
+		this.state.email = userInfo.result.email;
 	}
 
 	public async updateFile(args: {
