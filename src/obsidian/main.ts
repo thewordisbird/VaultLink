@@ -1,21 +1,24 @@
 import { EventRef, Plugin, TAbstractFile } from "obsidian";
-import { DEFAULT_SETTINGS, SettingsTab } from "./settings";
-import { DropboxProvider } from ".././providers/dropbox.provider";
 import { PubSub } from "../../lib/pubsub";
-import { Sync } from "src/sync/sync";
-import type { PluginSettings } from "./settings";
-import { PubsubTopic } from "../types";
-import { providerLongpollError, providerSyncError } from "./notice";
+import { DEFAULT_SETTINGS, SettingsTab } from "./settings";
+import {
+	providerLongpollError,
+	providerMoveFolderOrFileError,
+	providerSyncError,
+} from "./notice";
+import { DropboxProvider } from "../providers/dropbox.provider";
+import { FileSync } from "../sync/file-sync";
 
-// TODO: Define this type - should not bring dropbox contents into this file
+import { PubsubTopic } from "../types";
+import type { ClientPath, ProviderPath } from "../types";
+import type { PluginSettings } from "./settings";
+
 const LONGPOLL_FREQUENCY = 30000;
 
 export default class VaultLink extends Plugin {
-	private fileSync: Sync;
 	public settings: PluginSettings;
-
+	private fileSync: FileSync;
 	private longpollIntervalId: number | undefined;
-
 	private handleCreateEventRef: EventRef | undefined;
 	private handleModifyEventRef: EventRef | undefined;
 	private handleRenameEventRef: EventRef | undefined;
@@ -32,17 +35,16 @@ export default class VaultLink extends Plugin {
 		// - reading the eventual localstorage provider property
 		// - set when the client selects the provider
 		// and then be seta as a more general name - provider
-		const dropboxProvider = new DropboxProvider();
+		const provider = new DropboxProvider();
 
-		this.fileSync = new Sync({
+		this.fileSync = new FileSync({
 			obsidianApp: this.app,
 			settings: this.settings,
-			provider: dropboxProvider,
+			provider: provider,
 		});
 		/** END SETUP CLOUD PROVIDERS **/
 
 		/** PROVIDER AUTHENTICATIN`**/
-		// Set  protocol handler to catch authorization response form dropbox
 		this.registerObsidianProtocolHandler(
 			"connect-dropbox",
 			// TODO: Extract function
@@ -59,15 +61,17 @@ export default class VaultLink extends Plugin {
 					return;
 				}
 
-				dropboxProvider.setCodeVerifier(codeVerifier);
-				dropboxProvider
+				provider.setCodeVerifier(codeVerifier);
+				provider
 					.setAccessAndRefreshToken(protocolData.code)
 					.then(({ refreshToken }) => {
 						localStorage.setItem(
 							"dropboxRefreshToken",
 							refreshToken,
 						);
-						dropboxProvider.setUserInfo();
+						return provider.setUserInfo();
+					})
+					.then(() => {
 						pubsub.publish(PubsubTopic.AUTHORIZATION_SUCCESS);
 					})
 					.catch((_e) => {
@@ -81,19 +85,21 @@ export default class VaultLink extends Plugin {
 			async (args: { payload: string }) => {
 				const { payload } = args;
 
-				if (this.settings.cloudVaultPath == payload) {
-					console.log("No Change to vault path - returning");
-					return;
-				}
+				const providerPath = ("/" + payload) as ProviderPath;
+				const providerPathDisplay = payload as ClientPath;
 
-				this.settings.cloudVaultPath = payload;
+				if (this.settings.providerPath == providerPath) return;
+
+				this.settings.providerPath = providerPath;
+				this.settings.providerPathDisplay = providerPathDisplay;
+
 				await this.saveSettings();
-				if (!this.settings.cloudVaultPath) return;
+				if (!this.settings.providerPath) return;
 
 				try {
 					await this.fileSync.initializeFileMap();
 					await this.fileSync.syncRemoteFiles();
-					await this.fileSync.syncClientFiles();
+					await this.fileSync.syncClientFoldersAndFiles();
 				} catch (e) {
 					providerSyncError(e);
 				}
@@ -101,13 +107,11 @@ export default class VaultLink extends Plugin {
 		);
 
 		pubsub.subscribe(PubsubTopic.AUTHORIZATION_SUCCESS, async () => {
-			//TODO: Cloudvault setting should be reset on login. Once that happend
-			//need to check if there is a valut setup.
-			if (!this.settings.cloudVaultPath) return;
+			if (!this.settings.providerPath) return;
 			try {
 				await this.fileSync.initializeFileMap();
 				await this.fileSync.syncRemoteFiles();
-				await this.fileSync.syncClientFiles();
+				await this.fileSync.syncClientFoldersAndFiles();
 				this.registerPluginIntervals();
 				this.registerPluginEventHandlers();
 			} catch (e) {
@@ -132,15 +136,14 @@ export default class VaultLink extends Plugin {
 		// Automatically authenticate from refresh token
 		if (refreshToken) {
 			try {
-				dropboxProvider.authorizeWithRefreshToken(refreshToken);
-				await dropboxProvider.setUserInfo();
+				provider.authorizeWithRefreshToken(refreshToken);
+				await provider.setUserInfo();
 				pubsub.publish(PubsubTopic.AUTHORIZATION_SUCCESS);
 			} catch (e) {
 				pubsub.publish(PubsubTopic.AUTHORIZATION_FAILURE);
 			}
 		}
 
-		// Add Settings Tab For Plugin
 		this.addSettingTab(settingsTab);
 	}
 
@@ -190,9 +193,9 @@ export default class VaultLink extends Plugin {
 			"rename",
 			(folderOrFile: TAbstractFile, ctx: string) => {
 				this.fileSync
-					.reconcileMoveFileOnClient({ folderOrFile, ctx })
+					.reconcileMoveFolderOrFileOnClient({ folderOrFile, ctx })
 					.catch((e) => {
-						providerSyncError(e);
+						providerMoveFolderOrFileError(e);
 					});
 			},
 		);
@@ -233,7 +236,9 @@ export default class VaultLink extends Plugin {
 		}
 	}
 
-	onunload() {}
+	onunload() {
+		// TODO: Remove all local storage data
+	}
 
 	async loadSettings() {
 		this.settings = Object.assign(

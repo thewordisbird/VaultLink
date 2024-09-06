@@ -1,62 +1,137 @@
-import type { files, DropboxResponse } from "dropbox";
-import { RemoteFilePath } from "src/utils";
-import { FileMetadataExtended } from "./dropbox.provider";
+import { ProviderPath } from "src/types";
+declare const __brand: unique symbol;
+
+export type ProviderState = {
+	accountId: string | undefined;
+	email: string | undefined;
+};
+
+export type FileHash = string & { [__brand]: "file hash" };
+
+export type ProviderFileResult = {
+	name: string;
+	path: ProviderPath;
+	rev: string;
+	fileHash: FileHash;
+	serverModified: string; // TODO: Should this be converted to a date?
+};
+
+export type ProviderFileContentsResult = ProviderFileResult & {
+	contents: ArrayBuffer;
+};
+
+export type ProviderFolderResult = {
+	name: string;
+	path: ProviderPath;
+};
+
+export type ProviderDeleteResult = {
+	name: string;
+	path: ProviderPath;
+};
+
+export type ProviderMoveResult = {
+	name: string;
+	path: ProviderPath;
+	type: "file" | "folder" | "deleted";
+};
+
+export type ProviderBatchResult = {
+	results: {
+		name: string;
+		path: ProviderPath;
+		type: "file" | "folder" | "deleted";
+	}[];
+	hasFailure: boolean;
+};
+
+export interface CreateFileHashArgs {
+	contents: ArrayBuffer;
+}
+
+export type ProcessBatchCreateFileResult = {
+	path: ProviderPath;
+	rev: string;
+	fileHash: FileHash;
+};
+
+export interface ListFoldersAndFilesArgs {
+	vaultRoot: ProviderPath;
+	recursive: boolean;
+}
+
+export type ListFoldersAndFilesResults = {
+	files: ProviderFileResult[];
+	folders: ProviderFolderResult[];
+	deleted: ProviderDeleteResult[];
+	cursor: string;
+};
+
+export interface ListFolderAndFilesContinueArgs {
+	cursor: string;
+}
+
+export type ListFoldersAndFilesContinueResult = ListFoldersAndFilesResults & {
+	hasMore: boolean;
+};
+
+export type ProcessBatchMoveFolderOrFileResult = {
+	results: {
+		name: string;
+		path: ProviderPath;
+		type: "folder" | "file" | "deleted";
+	}[];
+	hasFailure: boolean;
+};
 
 export interface Provider {
 	email: string;
-	createFileHash: (args: { fileData: ArrayBuffer }) => string;
-	listFiles(args: { vaultRoot: string }): Promise<{
-		files: (
-			| files.FileMetadataReference
-			| files.FolderMetadataReference
-			| files.DeletedMetadataReference
-		)[];
-		cursor: string;
-	}>;
-	listFilesContinue(args: { cursor: string }): Promise<{
-		files: (
-			| files.FileMetadataReference
-			| files.FolderMetadataReference
-			| files.DeletedMetadataReference
-		)[];
-		cursor: string;
-	}>;
-	updateFile(args: {
-		//TODO: paths should be FilePath
-		path: string;
-		rev: string | undefined;
-		contents: ArrayBuffer;
-	}): Promise<void | DropboxResponse<files.FileMetadata>>;
-	downloadFile(args: { path: string }): Promise<FileMetadataExtended>;
-	revokeAuthorizationToken(): Promise<void>;
-	getAuthenticationUrl(): Promise<String>;
-	getCodeVerifier(): string;
-	processBatchRenameFolderOrFile(
-		args: {
-			from_path: RemoteFilePath;
-			to_path: RemoteFilePath;
-		}[],
-	): Promise<files.RelocationBatchResultEntry[]>;
 
-	processBatchCreateFile(
-		args: {
-			path: string;
-			contents: ArrayBuffer;
-		}[],
-	): Promise<DropboxResponse<files.UploadSessionFinishBatchResult>>;
+	getAuthenticationUrl(): Promise<string>;
+
+	getCodeVerifier(): string;
+
+	setCodeVerifier(codeVerifier: string): void;
+
+	setAccessAndRefreshToken(
+		authorizationCode: string,
+	): Promise<{ refreshToken: string }>;
+
+	revokeAuthorizationToken(): Promise<void>;
+
+	authorizeWithRefreshToken(refreshToken: string): void;
+
+	longpoll(args: { cursor: string }): Promise<ListFoldersAndFilesResults>;
+
+	listFoldersAndFiles(
+		args: ListFoldersAndFilesArgs,
+	): Promise<ListFoldersAndFilesResults>;
 
 	processBatchCreateFolder(args: {
-		paths: string[];
-	}): Promise<files.CreateFolderBatchResultEntry[]>;
-	processBatchDeleteFolderOfFile(args: {
-		paths: string[];
-	}): Promise<files.DeleteBatchResultEntry[]>;
-	longpoll(args: { cursor: string }): Promise<{
-		files: (
-			| files.FileMetadataReference
-			| files.FolderMetadataReference
-			| files.DeletedMetadataReference
-		)[];
-		cursor: string;
-	}>;
+		paths: ProviderPath[];
+	}): Promise<{ results: ProviderFolderResult[]; hasFailure: boolean }>;
+
+	processBatchMoveFolderOrFile(
+		args: { fromPath: ProviderPath; toPath: ProviderPath }[],
+	): Promise<{ results: ProviderMoveResult[]; hasFailure: boolean }>;
+
+	processBatchDeleteFolderOrFile(args: {
+		paths: ProviderPath[];
+	}): Promise<{ results: ProviderDeleteResult[]; hasFailure: boolean }>;
+
+	processBatchCreateFile(
+		args: { path: ProviderPath; contents: ArrayBuffer }[],
+	): Promise<{ results: ProviderFileResult[]; hasFailure: boolean }>;
+
+	createFileHash: (args: { contents: ArrayBuffer }) => FileHash;
+
+	downloadFile(args: { path: string }): Promise<ProviderFileContentsResult>;
+
+	setUserInfo(): Promise<void>;
+
+	updateFile(args: {
+		path: ProviderPath;
+		rev: string | undefined;
+		contents: ArrayBuffer;
+	}): Promise<ProviderFileResult>;
 }

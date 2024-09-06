@@ -17,6 +17,12 @@ export function providerAuthError(details = "") {
 	new Notice(`Provider Auth Error: ${details}\n\nPlease try again.`, 0);
 }
 
+export function providerMoveFolderOrFileError(details = "") {
+	new Notice(
+		`Provider move or rename file error:\n\nPlease check provider and attempt manual resync to resolve.\n\nError details: ${details}`,
+	);
+}
+
 export function obsidianFileRetrievalError(fileName: string) {
 	new Notice(
 		`Obsidian File Access Error: Unable retrieve contents of ${fileName}`,

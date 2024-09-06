@@ -1,5 +1,5 @@
 import { StrictMode, useState, useEffect } from "react";
-import { Folder, PubsubTopic } from "src/types";
+import { Folder, ProviderPath, PubsubTopic } from "src/types";
 import { PubSub } from "../../lib/pubsub";
 import { DropboxProvider } from "../providers/dropbox.provider";
 import { useSelectVault } from "./useSelectVault";
@@ -17,10 +17,6 @@ const SelectVault: React.FC<SelectVaultProps> = ({
 	closeModal,
 }) => {
 	const [state, dispatch] = useSelectVault(currentPath);
-
-	useEffect(() => {
-		//console.log("STATE PATH:", state.path);
-	}, [state.path]);
 
 	return (
 		<StrictMode>
@@ -47,18 +43,22 @@ const SelectVault: React.FC<SelectVaultProps> = ({
 			<CurrentLocation
 				path={state.path}
 				isAddFolderDisplayed={state.isAddFolderDisplayed}
-				handleSave={(folderName) => {
+				handleSave={async (folderName) => {
 					const folderPath = state.path.length
 						? `/${state.path.join("/")}/${folderName}`
 						: `/${folderName}`;
 
-					dropboxProvider.addFolder(folderPath).then((_res) => {
-						dispatch({
-							type: "ADD_FOLDER",
-							payload: {
-								folderName: folderPath.split("/").pop() || "",
-							},
+					const { hasFailure } =
+						await dropboxProvider.processBatchCreateFolder({
+							paths: [folderPath as ProviderPath],
 						});
+					// TODO: Error handling
+					if (hasFailure) return;
+					dispatch({
+						type: "ADD_FOLDER",
+						payload: {
+							folderName: folderPath.split("/").pop() || "",
+						},
 					});
 				}}
 				handleCancel={() => {
@@ -77,10 +77,6 @@ const SelectVault: React.FC<SelectVaultProps> = ({
 					});
 				}}
 			/>
-			{/*
-			<TableCurrentLocation />
-			<TableBody />
-			*/}
 		</StrictMode>
 	);
 };
@@ -193,57 +189,6 @@ const CurrentLocation: React.FC<CurrentLocationProps> = ({
 	);
 };
 
-/*
-export const TableCurrentLocation: React.FC = () => {
-	const [folderName, setFolderName] = useState("");
-	//const [state, dispatch] = useSelectVault();
-
-	function handleAddFolder(_e: React.MouseEvent<HTMLButtonElement>): void {
-		console.log("handleAddFolder, path, name:", state.path, folderName);
-		const folderPath = state.path.length
-			? `/${state.path.join("/")}/${folderName}`
-			: `/${folderName}`;
-		dropboxProvider.addFolder(folderPath).then((_res) => {
-			dispatch({ type: "ADD_FOLDER", payload: { folderName } });
-		});
-	}
-
-	return (
-		<div className="folder-current-location">
-			<h2>
-				{!state.path.length
-					? "All folders"
-					: state.path[state.path.length - 1]}
-				{state.isAddFolderDisplayed && (
-					<span className="display-slash"> &#47; </span>
-				)}
-			</h2>
-
-			{state.isAddFolderDisplayed ? (
-				<div className="add-folder-form">
-					<input
-						type="text"
-						onChange={(e) => setFolderName(e.target.value)}
-					/>
-					<div className="add-folder-form-control">
-						<button className="mod-cta" onClick={handleAddFolder}>
-							Save
-						</button>
-						<button
-							onClick={() =>
-								dispatch({ type: "TOGGLE_ADD_FOLDER" })
-							}
-						>
-							Cancel
-						</button>
-					</div>
-				</div>
-			) : null}
-		</div>
-	);
-};
-
-*/
 interface TextLinkProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
 	children: string;
 }
@@ -292,96 +237,4 @@ const FolderList: React.FC<FolderListProps> = ({
 	);
 };
 
-/*
- * note: The type for name on Folder is string | undefined as it comes form
- * Dropbox. It appears as there is no way to have an unamed folder so
- * using the non-null assertion should be ok
- */
-/*
-export const TableBody: React.FC = () => {
-	// const [state, dispatch] = useSelectVault();
-
-	// useEffect(() => {
-	// 	// TODO: handle error state: should set folders to empty array and display error message
-	// 	dispatch({ type: "SET_IS_LOADING" });
-	// 	dropboxProvider
-	// 		.listFolders(state.path.length ? "/" + state.path.join("/") : "")
-	// 		.then((folders) => {
-	// 			if (folders) {
-	// 				dispatch({
-	// 					type: "SET_FOLDERS",
-	// 					payload: { folders: folders },
-	// 				});
-	// 			}
-	// 		});
-	// }, [state.path]);
-
-	if (state.isLoading) return <h3>Loading...</h3>;
-	if (!state.folders.length) return <h3>No sub-folders</h3>;
-	return (
-		<div style={{ overflowY: "auto", height: "225px" }}>
-			<table className="folder-select-table">
-				<tbody>
-					{state.folders.map((folder, idx) => (
-						<tr
-							className={`table-row ${idx % 2 == 0 ? "table-alt-row" : ""}`}
-							key={folder.path}
-						>
-							<td
-								onClick={() =>
-									dispatch({
-										type: "SET_VAULT_PATH",
-										payload: {
-											path: [...state.path, folder.name!],
-										},
-									})
-								}
-							>
-								{folder.name!}
-							</td>
-						</tr>
-					))}
-				</tbody>
-			</table>
-		</div>
-	);
-};
-*/
-export const MockMe: React.FC = () => {
-	//const [state, setState] = useState("");
-	const [folders, setFolders] = useState<Folder[]>([]);
-	const [error, setError] = useState<string | undefined>();
-
-	useEffect(() => {
-		//console.log("DropboxProvider:", dropboxProvider);
-		dropboxProvider
-			.listFolders("")
-			.then((folders) => {
-				setFolders(folders);
-			})
-			.catch((_e) => {
-				setError("List folder error");
-			});
-		// dropboxProvider
-		// 	.addFolder("/new_folder")
-		// 	.then(() => setState("Folder Added"));
-
-		// fetch("/greeting")
-		// 	.then((res) => res.json())
-		// 	.then(({ greeting }) => setState(greeting));
-	}, []);
-
-	// if (!state) return null;
-	// return <h1>{state}</h1>;
-	//
-	if (!folders.length) return null;
-	if (error) return <h1>{error}</h1>;
-	return (
-		<div>
-			{folders.map((folder) => (
-				<p key={folder.path}>{folder.name!}</p>
-			))}
-		</div>
-	);
-};
 export default SelectVault;

@@ -1,43 +1,36 @@
 import { Dropbox, DropboxAuth, DropboxResponse, files } from "dropbox";
+import { exponentialBackoff } from "../../lib/exponential-backoff";
 import { dropboxContentHasher } from "./dropbox.hasher";
-import { batchProcess, exponentialBackoff, RemoteFilePath } from "src/utils";
-import type { Folder } from "../types";
-import { Provider } from "./types";
+import type { ProviderPath } from "../types";
+import type {
+	FileHash,
+	ListFoldersAndFilesArgs,
+	ListFoldersAndFilesResults,
+	Provider,
+	ProviderDeleteResult,
+	ProviderFileContentsResult,
+	ProviderFileResult,
+	ProviderFolderResult,
+	ProviderMoveResult,
+	ProviderState,
+} from "./types";
 
-// TODO: All listfolder, listFiles, listFilesContinue need to consider has_more
-
-type DropboxAccount = {
-	accountId: string;
-	email: string;
-};
-
-type DropboxState = {
-	account: DropboxAccount;
-};
-
-export interface FileMetadataExtended extends files.FileMetadata {
-	fileBlob?: Blob;
-}
-const BATCH_DELAY_TIME = 500;
+const BATCH_DELAY_TIME = 250;
+const MAX_RETRY = 10;
+const GROWTH_FACTOR = 2;
 
 export const REDIRECT_URI = "obsidian://connect-dropbox";
 export const CLIENT_ID = "vofawt4jgywrgey";
 
-export const DROPBOX_PROVIDER_ERRORS = {
-	authenticationError: "Auth Error: Unable to authenticate with dropbox",
-	revocationError: "Revokeation Error: Unable to revoke dropbox token",
-	resourceAccessError:
-		"Resource Access Error: Unable to access Drpobox resource",
-};
-
 let instance: DropboxProvider | undefined;
 
-// @ts-ignore
 export class DropboxProvider implements Provider {
-	dropbox: Dropbox;
-	dropboxAuth: DropboxAuth;
-	state = {} as DropboxState;
-	revMap = new Map<string, string>();
+	private dropbox: Dropbox;
+	private dropboxAuth: DropboxAuth;
+	private state: ProviderState = {
+		accountId: undefined,
+		email: undefined,
+	};
 
 	static resetInstance() {
 		instance = undefined;
@@ -58,202 +51,260 @@ export class DropboxProvider implements Provider {
 		return instance;
 	}
 
+	get email(): string {
+		return this.state.email || "";
+	}
+
 	/* Start Authentication and Authorization */
-	getAuthenticationUrl(): Promise<String> {
-		return this.dropboxAuth
-			.getAuthenticationUrl(
-				REDIRECT_URI, // redirectUri
-				undefined, // state
-				"code", // authType
-				"offline", // tokenAccessType
-				undefined, // scope
-				undefined, // includeGrantedScopes
-				true, // usePKCE
-			)
-			.catch((_e) => {
-				throw new Error(DROPBOX_PROVIDER_ERRORS.authenticationError);
-			});
+	public async getAuthenticationUrl(): Promise<string> {
+		const authUrl = await this.dropboxAuth.getAuthenticationUrl(
+			REDIRECT_URI, // redirectUri
+			undefined, // state
+			"code", // authType
+			"offline", // tokenAccessType
+			undefined, // scope
+			undefined, // includeGrantedScopes
+			true, // usePKCE
+		);
+
+		return authUrl.toString();
 	}
 
-	get email() {
-		return this.state.account?.email;
-	}
-
-	getCodeVerifier(): string {
+	public getCodeVerifier(): string {
 		return this.dropboxAuth.getCodeVerifier();
 	}
 
-	setCodeVerifier(codeVerifier: string): void {
+	public setCodeVerifier(codeVerifier: string): void {
 		return this.dropboxAuth.setCodeVerifier(codeVerifier);
 	}
 
-	async setAccessAndRefreshToken(
+	public async setAccessAndRefreshToken(
 		authorizationCode: string,
 	): Promise<{ refreshToken: string }> {
-		try {
-			const {
-				result: { access_token, refresh_token },
-			} = (await this.dropboxAuth.getAccessTokenFromCode(
-				REDIRECT_URI,
-				authorizationCode,
-			)) as DropboxResponse<{
-				access_token: string;
-				refresh_token: string;
-			}>;
+		const {
+			result: { access_token, refresh_token },
+		} = (await this.dropboxAuth.getAccessTokenFromCode(
+			REDIRECT_URI,
+			authorizationCode,
+		)) as DropboxResponse<{
+			access_token: string;
+			refresh_token: string;
+		}>;
 
-			this.dropboxAuth.setAccessToken(access_token);
-			this.dropboxAuth.setRefreshToken(refresh_token);
+		this.dropboxAuth.setAccessToken(access_token);
+		this.dropboxAuth.setRefreshToken(refresh_token);
 
-			return { refreshToken: refresh_token };
-		} catch (_e) {
-			throw new Error(DROPBOX_PROVIDER_ERRORS.authenticationError);
-		}
+		return { refreshToken: refresh_token };
 	}
 
-	revokeAuthorizationToken(): Promise<void> {
-		return this.dropbox
-			.authTokenRevoke()
-			.then(() => {
-				this.state = {} as DropboxState;
-			})
-			.catch((_e: any) => {
-				throw new Error(DROPBOX_PROVIDER_ERRORS.revocationError);
-			});
+	public async revokeAuthorizationToken(): Promise<void> {
+		await this.dropbox.authTokenRevoke();
+		this.state.email = undefined;
+		this.state.accountId = undefined;
 	}
 
-	authorizeWithRefreshToken(refreshToken: string): void {
+	public authorizeWithRefreshToken(refreshToken: string): void {
 		this.dropboxAuth.setRefreshToken(refreshToken);
 		this.dropboxAuth.refreshAccessToken();
 	}
-
-	getAuthorizationState(): Promise<boolean> {
-		return this.dropbox
-			.checkUser({})
-			.then(() => true)
-			.catch(() => false);
-	}
 	/* End Authentication and Authorization */
 
-	listFolders(root = ""): Promise<Folder[]> {
-		return this.dropbox
-			.filesListFolder({ path: root })
-			.then((res) => {
-				return res.result.entries
-					.filter((entry) => entry[".tag"] === "folder")
-					.map((folder) => {
-						return {
-							name: folder.name,
-							path: folder.path_lower,
-							displayPath: folder.path_display,
-						} as Folder;
-					});
-			})
-			.catch((e: any) => {
-				console.error("listFolders error:", e);
-				throw new Error(DROPBOX_PROVIDER_ERRORS.resourceAccessError);
-			});
-	}
-
-	// TODO: change this to 'createFolder' to be consistent with the rest of the api.
-	addFolder(path: string) {
-		return new Promise<void>((resolve, reject) => {
-			this.dropbox
-				.filesCreateFolderV2({ path })
-				.then(function () {
-					resolve();
-				})
-				.catch(function () {
-					reject(
-						new Error(DROPBOX_PROVIDER_ERRORS.resourceAccessError),
-					);
-				});
-		});
-	}
-
-	listFiles(args: { vaultRoot: string }) {
-		return this.dropbox
-			.filesListFolder({ path: args.vaultRoot, recursive: true })
-			.then((res) => {
-				return {
-					files: res.result.entries,
-					cursor: res.result.cursor,
-				};
-			})
-			.catch((e: any) => {
-				console.error("listFolders error:", e);
-				throw new Error(DROPBOX_PROVIDER_ERRORS.resourceAccessError);
-			});
-	}
-
-	listFilesContinue(args: { cursor: string }) {
-		return this.dropbox
-			.filesListFolderContinue({
-				cursor: args.cursor,
-			})
-			.then((res) => {
-				return {
-					files: res.result.entries,
-					cursor: res.result.cursor,
-				};
-			})
-			.catch((e: any) => {
-				console.error("listFoldersContinue error:", e);
-				throw new Error(DROPBOX_PROVIDER_ERRORS.resourceAccessError);
-			});
-	}
-
-	public async longpoll(args: { cursor: string }) {
+	/* Start Folder and File Access */
+	public async longpoll(args: {
+		cursor: string;
+	}): Promise<ListFoldersAndFilesResults> {
 		// Uses default `timeout` arg of 30 seconds
 		const longPollResult = await this.dropbox.filesListFolderLongpoll({
 			cursor: args.cursor,
 		});
+
 		if (!longPollResult.result.changes) {
-			return { cursor: args.cursor, files: [] };
+			return { folders: [], files: [], deleted: [], cursor: args.cursor };
 		}
-		// TODO: Refactor to include has_more
-		let remoteFiles = await this.listFilesContinue({
-			cursor: args.cursor,
+
+		let folders: ProviderFolderResult[] = [];
+		let files: ProviderFileResult[] = [];
+		let deleted: ProviderDeleteResult[] = [];
+
+		let hasMore: boolean;
+		let cursor = args.cursor;
+		do {
+			const listFoldersAndFilesContinueResult =
+				await this.listFoldersAndFilesContinue({ cursor });
+
+			folders.push(...listFoldersAndFilesContinueResult.folders);
+			files.push(...listFoldersAndFilesContinueResult.files);
+			deleted.push(...listFoldersAndFilesContinueResult.deleted);
+			cursor = listFoldersAndFilesContinueResult.cursor;
+			hasMore = listFoldersAndFilesContinueResult.hasMore;
+		} while (hasMore);
+
+		return { folders, files, deleted, cursor };
+	}
+
+	public async listFoldersAndFiles(
+		args: ListFoldersAndFilesArgs,
+	): Promise<ListFoldersAndFilesResults> {
+		let filesListFolderResult = await this.dropbox.filesListFolder({
+			path: args.vaultRoot,
+			recursive: args.recursive,
 		});
-		return remoteFiles;
+		let files = filesListFolderResult.result.entries
+			.filter(
+				(entry): entry is files.FileMetadataReference =>
+					entry[".tag"] == "file",
+			)
+			.map((file) => ({
+				name: file.name,
+				path: file.path_lower as ProviderPath,
+				rev: file.rev,
+				fileHash: file.content_hash as FileHash,
+				serverModified: file.server_modified,
+			}));
+
+		let folders = filesListFolderResult.result.entries
+			.filter(
+				(entry): entry is files.FolderMetadataReference =>
+					entry[".tag"] == "folder",
+			)
+			.map((folder) => ({
+				name: folder.name,
+				path: folder.path_lower as ProviderPath,
+			}));
+
+		let deleted = filesListFolderResult.result.entries
+			.filter(
+				(entry): entry is files.DeletedMetadataReference =>
+					entry[".tag"] == "deleted",
+			)
+			.map((deletedResource) => ({
+				name: deletedResource.name,
+				path: deletedResource.path_lower as ProviderPath,
+			}));
+
+		let cursor = filesListFolderResult.result.cursor;
+		let hasMore = filesListFolderResult.result.has_more;
+
+		while (hasMore) {
+			const listFolderAndFilesContinueResilt =
+				await this.listFoldersAndFilesContinue({ cursor });
+			files.push(...listFolderAndFilesContinueResilt.files);
+			folders.push(...listFolderAndFilesContinueResilt.folders);
+			deleted.push(...listFolderAndFilesContinueResilt.deleted);
+
+			cursor = listFolderAndFilesContinueResilt.cursor;
+			hasMore = listFolderAndFilesContinueResilt.hasMore;
+		}
+
+		return {
+			files,
+			folders,
+			deleted,
+			cursor,
+		};
 	}
 
-	downloadFile(args: { path: string }): Promise<FileMetadataExtended> {
-		const { path } = args;
-		return this.dropbox.filesDownload({ path }).then((res) => res.result);
+	private async listFoldersAndFilesContinue(args: { cursor: string }) {
+		const filesListFolderContinueResult =
+			await this.dropbox.filesListFolderContinue({ cursor: args.cursor });
+
+		const files = filesListFolderContinueResult.result.entries
+			.filter(
+				(entry): entry is files.FileMetadataReference =>
+					entry[".tag"] == "file",
+			)
+			.map((file) => ({
+				name: file.name,
+				path: file.path_lower as ProviderPath,
+				rev: file.rev,
+				fileHash: file.content_hash as FileHash,
+				serverModified: file.server_modified,
+			}));
+
+		const folders = filesListFolderContinueResult.result.entries
+			.filter(
+				(entry): entry is files.FolderMetadataReference =>
+					entry[".tag"] == "folder",
+			)
+			.map((folder) => ({
+				name: folder.name,
+				path: folder.path_lower as ProviderPath,
+			}));
+
+		const deleted = filesListFolderContinueResult.result.entries
+			.filter(
+				(entry): entry is files.DeletedMetadataReference =>
+					entry[".tag"] == "deleted",
+			)
+			.map((deletedResource) => ({
+				name: deletedResource.name,
+				path: deletedResource.path_lower as ProviderPath,
+			}));
+
+		const cursor = filesListFolderContinueResult.result.cursor;
+		const hasMore = filesListFolderContinueResult.result.has_more;
+
+		return {
+			files,
+			folders,
+			deleted,
+			hasMore,
+			cursor,
+		};
 	}
 
-	setUserInfo(): Promise<void> {
-		return this.dropbox
-			.usersGetCurrentAccount()
-			.then((response) => {
-				this.state.account = {
-					accountId: response.result.account_id,
-					email: response.result.email,
-				};
-			})
-			.catch((_e: any) => {
-				throw new Error(DROPBOX_PROVIDER_ERRORS.resourceAccessError);
+	public async processBatchCreateFolder(args: {
+		paths: ProviderPath[];
+	}): Promise<{ results: ProviderFolderResult[]; hasFailure: boolean }> {
+		const batchResults = await this.dropbox.filesCreateFolderBatch({
+			paths: args.paths,
+		});
+
+		if (batchResults.result[".tag"] == "complete") {
+			const success = batchResults.result.entries
+				.filter(
+					(
+						entry,
+					): entry is files.CreateFolderBatchResultEntrySuccess =>
+						entry[".tag"] == "success",
+				)
+				.map((successEntry) => ({
+					name: successEntry.metadata.name,
+					path: successEntry.metadata.path_lower as ProviderPath,
+				}));
+
+			return {
+				results: success,
+				hasFailure:
+					success.length != batchResults.result.entries.length,
+			};
+		} else if (batchResults.result[".tag"] == "async_job_id") {
+			const batchCheckResults = await this.batchCreateFolderCheck({
+				asyncJobId: batchResults.result.async_job_id,
 			});
-	}
 
-	/* File and Folder Controls */
-	public processBatchCreateFolder(args: { paths: string[] }) {
-		return this.dropbox
-			.filesCreateFolderBatch({ paths: args.paths })
-			.then((res) => {
-				if (res.result[".tag"] == "complete") return res.result.entries;
-				else if (res.result[".tag"] == "async_job_id") {
-					return this.batchCreateFolderCheck({
-						asyncJobId: res.result.async_job_id,
-					}).then((res) => {
-						return res.result.entries;
-					});
-				} else {
-					throw new Error(
-						`Unknown ".tag" property: ${res.result[".tag"]}`,
-					);
-				}
-			});
+			const success = batchCheckResults.result.entries
+				.filter(
+					(
+						entry,
+					): entry is files.CreateFolderBatchResultEntrySuccess =>
+						entry[".tag"] == "success",
+				)
+				.map((successEntry) => ({
+					name: successEntry.metadata.name,
+					path: successEntry.metadata.path_lower as ProviderPath,
+				}));
+
+			return {
+				results: success,
+				hasFailure:
+					success.length != batchCheckResults.result.entries.length,
+			};
+		} else {
+			throw new Error(
+				`Unknown ".tag" property: ${batchResults.result[".tag"]}`,
+			);
+		}
 	}
 
 	private batchCreateFolderCheck = exponentialBackoff<
@@ -263,12 +314,14 @@ export class DropboxProvider implements Provider {
 	>({
 		func: this._batchCreateFolderCheck.bind(this),
 		checkFunc: this._batchCreateFolderCheckIsSuccess.bind(this),
-		interval: 250,
-		maxRetry: 10,
-		growthFactor: 2,
+		interval: BATCH_DELAY_TIME,
+		maxRetry: MAX_RETRY,
+		growthFactor: GROWTH_FACTOR,
 	});
 
-	private _batchCreateFolderCheck(args: { asyncJobId: string }) {
+	private _batchCreateFolderCheck(args: {
+		asyncJobId: string;
+	}): Promise<DropboxResponse<files.CreateFolderBatchJobStatus>> {
 		return this.dropbox.filesCreateFolderBatchCheck({
 			async_job_id: args.asyncJobId,
 		});
@@ -276,70 +329,140 @@ export class DropboxProvider implements Provider {
 
 	private _batchCreateFolderCheckIsSuccess(
 		args: DropboxResponse<files.CreateFolderBatchJobStatus>,
-	) {
+	): boolean {
 		return args.result[".tag"] == "complete";
 	}
 
-	public processBatchRenameFolderOrFile(
-		args: { from_path: RemoteFilePath; to_path: RemoteFilePath }[],
-	) {
-		return this.dropbox
-			.filesMoveBatchV2({ entries: args })
-			.then(async (res) => {
-				if (res.result[".tag"] == "complete") return res.result.entries;
-				else if (res.result[".tag"] == "async_job_id") {
-					return this.batchRenameFolderOrFileCheck({
-						asyncJobId: res.result.async_job_id,
-					}).then((res) => {
-						return res.result.entries;
-					});
-				} else {
-					throw new Error(
-						`Unknown ".tag" property: ${res.result[".tag"]}`,
-					);
-				}
+	public async processBatchMoveFolderOrFile(
+		args: { fromPath: ProviderPath; toPath: ProviderPath }[],
+	): Promise<{ results: ProviderMoveResult[]; hasFailure: boolean }> {
+		const batchResults = await this.dropbox.filesMoveBatchV2({
+			entries: args.map((arg) => ({
+				from_path: arg.fromPath,
+				to_path: arg.toPath,
+			})),
+		});
+		if (batchResults.result[".tag"] == "complete") {
+			const success = batchResults.result.entries
+				.filter(
+					(entry): entry is files.RelocationBatchResultEntrySuccess =>
+						entry[".tag"] == "success",
+				)
+				.map((successEntry) => ({
+					name: successEntry.success.name,
+					path: successEntry.success.path_lower as ProviderPath,
+					type: successEntry.success[".tag"],
+				}));
+
+			return {
+				results: success,
+				hasFailure:
+					success.length != batchResults.result.entries.length,
+			};
+		} else if (batchResults.result[".tag"] == "async_job_id") {
+			const batchCheckResults = await this.batchMoveFolderOrFileCheck({
+				asyncJobId: batchResults.result.async_job_id,
 			});
+
+			const success = batchCheckResults.result.entries
+				.filter(
+					(entry): entry is files.RelocationBatchResultEntrySuccess =>
+						entry[".tag"] == "success",
+				)
+				.map((successEntry) => ({
+					name: successEntry.success.name,
+					path: successEntry.success.path_lower as ProviderPath,
+					type: successEntry.success[".tag"],
+				}));
+
+			return {
+				results: success,
+				hasFailure:
+					success.length != batchCheckResults.result.entries.length,
+			};
+		} else {
+			throw new Error(
+				`Unknown ".tag" property: ${batchResults.result[".tag"]}`,
+			);
+		}
 	}
 
-	private batchRenameFolderOrFileCheck = exponentialBackoff<
+	private batchMoveFolderOrFileCheck = exponentialBackoff<
 		{ asyncJobId: string },
 		DropboxResponse<files.RelocationBatchV2JobStatus>,
 		DropboxResponse<files.RelocationBatchV2JobStatusComplete>
 	>({
-		func: this._batchRenameFolderOrFileCheck.bind(this),
-		checkFunc: this._batchRenameFolderOrFileCheckIsSuccess.bind(this),
-		interval: 250,
-		maxRetry: 10,
-		growthFactor: 2,
+		func: this._batchMoveFolderOrFileCheck.bind(this),
+		checkFunc: this._batchMoveFolderOrFileCheckIsSuccess.bind(this),
+		interval: BATCH_DELAY_TIME,
+		maxRetry: MAX_RETRY,
+		growthFactor: GROWTH_FACTOR,
 	});
 
-	private _batchRenameFolderOrFileCheck(args: { asyncJobId: string }) {
+	private _batchMoveFolderOrFileCheck(args: {
+		asyncJobId: string;
+	}): Promise<DropboxResponse<files.RelocationBatchV2JobStatus>> {
 		return this.dropbox.filesMoveBatchCheckV2({
 			async_job_id: args.asyncJobId,
 		});
 	}
 
-	private _batchRenameFolderOrFileCheckIsSuccess(
+	private _batchMoveFolderOrFileCheckIsSuccess(
 		args: DropboxResponse<files.RelocationBatchV2JobStatus>,
 	) {
 		return args.result[".tag"] == "complete";
 	}
 
-	public processBatchDeleteFolderOfFile(args: { paths: string[] }) {
-		return this.dropbox
-			.filesDeleteBatch({ entries: args.paths.map((path) => ({ path })) })
-			.then(async (res) => {
-				if (res.result[".tag"] == "complete") return res.result.entries;
-				else if (res.result[".tag"] == "async_job_id") {
-					return this.batchDeleteFolderOrFileCheck({
-						asyncJobId: res.result.async_job_id,
-					}).then((res) => res.result.entries);
-				} else {
-					throw new Error(
-						`Unknown ".tag" property: ${res.result[".tag"]}`,
-					);
-				}
+	public async processBatchDeleteFolderOrFile(args: {
+		paths: ProviderPath[];
+	}): Promise<{ results: ProviderDeleteResult[]; hasFailure: boolean }> {
+		const batchResults = await this.dropbox.filesDeleteBatch({
+			entries: args.paths.map((path) => ({ path })),
+		});
+
+		if (batchResults.result[".tag"] == "complete") {
+			const success = batchResults.result.entries
+				.filter(
+					(entry): entry is files.DeleteBatchResultEntrySuccess =>
+						entry[".tag"] == "success",
+				)
+				.map((successEntry) => ({
+					name: successEntry.metadata.name,
+					path: successEntry.metadata.path_lower as ProviderPath,
+					type: successEntry.metadata[".tag"],
+				}));
+
+			return {
+				results: success,
+				hasFailure:
+					success.length != batchResults.result.entries.length,
+			};
+		} else if (batchResults.result[".tag"] == "async_job_id") {
+			const batchCheckResults = await this.batchDeleteFolderOrFileCheck({
+				asyncJobId: batchResults.result.async_job_id,
 			});
+
+			const success = batchCheckResults.result.entries
+				.filter(
+					(entry): entry is files.DeleteBatchResultEntrySuccess =>
+						entry[".tag"] == "success",
+				)
+				.map((successEntry) => ({
+					name: successEntry.metadata.name,
+					path: successEntry.metadata.path_lower as ProviderPath,
+					type: successEntry.metadata[".tag"],
+				}));
+
+			return {
+				results: success,
+				hasFailure:
+					success.length != batchCheckResults.result.entries.length,
+			};
+		} else {
+			throw new Error(
+				`Unknown ".tag" property: ${batchResults.result[".tag"]}`,
+			);
+		}
 	}
 
 	private batchDeleteFolderOrFileCheck = exponentialBackoff<
@@ -349,12 +472,14 @@ export class DropboxProvider implements Provider {
 	>({
 		func: this._batchDeleteFolderOrFileCheck.bind(this),
 		checkFunc: this._batchDeleteFolderOrFileCheckIsSuccess.bind(this),
-		interval: 250,
-		maxRetry: 10,
-		growthFactor: 2,
+		interval: BATCH_DELAY_TIME,
+		maxRetry: MAX_RETRY,
+		growthFactor: GROWTH_FACTOR,
 	});
 
-	private _batchDeleteFolderOrFileCheck(args: { asyncJobId: string }) {
+	private _batchDeleteFolderOrFileCheck(args: {
+		asyncJobId: string;
+	}): Promise<DropboxResponse<files.DeleteBatchJobStatus>> {
 		return this.dropbox.filesDeleteBatchCheck({
 			async_job_id: args.asyncJobId,
 		});
@@ -362,36 +487,51 @@ export class DropboxProvider implements Provider {
 
 	private _batchDeleteFolderOrFileCheckIsSuccess(
 		args: DropboxResponse<files.RelocationBatchV2JobStatus>,
-	) {
+	): boolean {
 		return args.result[".tag"] == "complete";
 	}
 
 	public async processBatchCreateFile(
-		args: { path: string; contents: ArrayBuffer }[],
-	) {
-		console.log("_createFile start:", args);
-
-		const sessionIds = await this._batchCreateFileStart(args.length);
-		// If an error happens here, we still need to fire Finally to close the batch
-		const { fulfilled, rejected } = await this._batchCreateFileAppend({
+		args: { path: ProviderPath; contents: ArrayBuffer }[],
+	): Promise<{ results: ProviderFileResult[]; hasFailure: boolean }> {
+		const sessionIds = await this.batchCreateFileStart(args.length);
+		// TODO: If an error happens here, we still need to fire Finally to close the batch
+		const { fulfilled, rejected } = await this.batchCreateFileAppend({
 			files: args,
 			sessionIds,
 		});
 
-		// TODO: Should this be returned to the caller??
-		const finishResults = await this._batchCreateFileFinish(fulfilled);
-		console.log("finishResults:", finishResults);
+		const batchResults = await this.batchCreateFileFinish(fulfilled);
 
-		// TODO: Handle rejected
-		if (rejected.length) {
-			console.log("REJECTED UPDATES:", rejected);
-		}
+		const success = batchResults.result.entries
+			.filter(
+				(
+					entry,
+				): entry is files.UploadSessionFinishBatchResultEntrySuccess =>
+					entry[".tag"] === "success",
+			)
+			.map((successEntry) => ({
+				name: successEntry.name,
+				path: successEntry.path_lower! as ProviderPath,
+				rev: successEntry.rev,
+				fileHash: successEntry.content_hash! as FileHash,
+				serverModified: successEntry.server_modified,
+			}));
 
-		console.log("_createFile return:", finishResults);
-		return finishResults;
+		const failure = batchResults.result.entries.filter(
+			(
+				entry,
+			): entry is files.UploadSessionFinishBatchResultEntryFailure =>
+				entry[".tag"] === "failure",
+		);
+
+		return {
+			results: success,
+			hasFailure: failure.length > 0 || rejected.length > 0,
+		};
 	}
 
-	private _batchCreateFileStart(numSessions: number) {
+	private batchCreateFileStart(numSessions: number): Promise<string[]> {
 		return this.dropbox
 			.filesUploadSessionStartBatch({
 				num_sessions: numSessions,
@@ -399,14 +539,24 @@ export class DropboxProvider implements Provider {
 			.then((res) => res.result.session_ids);
 	}
 
-	private _batchCreateFileAppend(args: {
+	private batchCreateFileAppend(args: {
 		files: { path: string; contents: ArrayBuffer }[];
 		sessionIds: string[];
-	}) {
+	}): Promise<{
+		fulfilled: PromiseFulfilledResult<{
+			path: string;
+			cursor: {
+				offset: number;
+				session_id: string;
+			};
+			response: DropboxResponse<void>;
+		}>[];
+		rejected: PromiseRejectedResult[];
+	}> {
 		const { files, sessionIds } = args;
 		const entries = [];
 		for (let i = 0; i < files.length; i++) {
-			console.log("bytesize:", files[i].contents.byteLength);
+			//console.log("bytesize:", files[i].contents.byteLength);
 
 			// NOTE: This assumes all files will be less than 150Mb
 			// An improvement can be made to split the file into 150Mb
@@ -468,13 +618,13 @@ export class DropboxProvider implements Provider {
 		});
 	}
 
-	private async _batchCreateFileFinish(
+	private async batchCreateFileFinish(
 		entries: PromiseFulfilledResult<{
 			path: string;
 			cursor: { offset: number; session_id: string };
 			response: DropboxResponse<void>;
 		}>[],
-	) {
+	): Promise<DropboxResponse<files.UploadSessionFinishBatchResult>> {
 		return this.dropbox.filesUploadSessionFinishBatchV2({
 			entries: entries.map((entry) => {
 				return {
@@ -487,11 +637,39 @@ export class DropboxProvider implements Provider {
 		});
 	}
 
-	public updateFile(args: {
+	public createFileHash(args: { contents: ArrayBuffer }): FileHash {
+		return dropboxContentHasher(args.contents) as FileHash;
+	}
+
+	public async downloadFile(args: {
 		path: string;
+	}): Promise<ProviderFileContentsResult> {
+		const { result } = await this.dropbox.filesDownload({
+			path: args.path,
+		});
+		// @ts-ignore
+		const contents = await result.fileBlob!.arrayBuffer();
+		return {
+			name: result.name,
+			path: result.path_lower as ProviderPath,
+			rev: result.rev,
+			fileHash: result.content_hash as FileHash,
+			serverModified: result.server_modified,
+			contents,
+		};
+	}
+
+	public async setUserInfo(): Promise<void> {
+		const userInfo = await this.dropbox.usersGetCurrentAccount();
+		this.state.accountId = userInfo.result.account_id;
+		this.state.email = userInfo.result.email;
+	}
+
+	public async updateFile(args: {
+		path: ProviderPath;
 		rev: string | undefined;
 		contents: ArrayBuffer;
-	}) {
+	}): Promise<ProviderFileResult> {
 		let mode: files.WriteModeUpdate | files.WriteModeOverwrite;
 		if (args.rev) {
 			mode = {
@@ -503,18 +681,17 @@ export class DropboxProvider implements Provider {
 				".tag": "overwrite",
 			};
 		}
-		return this.dropbox
-			.filesUpload({
-				mode,
-				path: args.path,
-				contents: new Blob([args.contents]),
-			})
-			.catch((e: any) => {
-				console.error("Dropbox filesUpload Error:", e);
-			});
-	}
-
-	public createFileHash(args: { fileData: ArrayBuffer }) {
-		return dropboxContentHasher(args.fileData);
+		const fileUploadResult = await this.dropbox.filesUpload({
+			mode,
+			path: args.path,
+			contents: new Blob([args.contents]),
+		});
+		return {
+			name: fileUploadResult.result.name,
+			path: fileUploadResult.result.path_lower as ProviderPath,
+			rev: fileUploadResult.result.rev,
+			fileHash: fileUploadResult.result.content_hash as FileHash,
+			serverModified: fileUploadResult.result.server_modified,
+		};
 	}
 }

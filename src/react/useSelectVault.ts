@@ -1,10 +1,11 @@
 import { useReducer, useEffect } from "react";
+import { ProviderFolderResult } from "src/providers/types";
 import { DropboxProvider } from "../providers/dropbox.provider";
-import type { Folder } from "../types";
+import type { ProviderPath } from "../types";
 
 type State = {
 	path: string[];
-	folders: Folder[];
+	folders: ProviderFolderResult[];
 	isAddFolderDisplayed: boolean;
 	isLoading: boolean;
 };
@@ -15,7 +16,7 @@ type Action =
 	| {
 			type: "SET_FOLDERS";
 			payload: {
-				folders: Folder[];
+				folders: ProviderFolderResult[];
 			};
 	  }
 	| { type: "ADD_FOLDER"; payload: { folderName: string } }
@@ -74,9 +75,15 @@ export function useSelectVault(
 	useEffect(() => {
 		// TODO: handle error state: should set folders to empty array and display error message
 		dispatch({ type: "SET_IS_LOADING" });
+		//TODO: Sanitize Path
+		const vaultRoot = state.path.length ? "/" + state.path.join("/") : "";
+		console.log("vaultRoot:", vaultRoot);
 		dropboxProvider
-			.listFolders(state.path.length ? "/" + state.path.join("/") : "")
-			.then((folders) => {
+			.listFoldersAndFiles({
+				vaultRoot: vaultRoot as ProviderPath,
+				recursive: false,
+			})
+			.then(({ folders }) => {
 				if (folders) {
 					dispatch({
 						type: "SET_FOLDERS",

@@ -4,7 +4,7 @@ import VaultLink from "./main";
 import { SelectVaultModal } from "./select-vault-modal";
 import { getProvider, ProviderName } from "../providers/provider";
 import { Provider } from "src/providers/types";
-import { PubsubTopic } from "src/types";
+import { ClientPath, ProviderPath, PubsubTopic } from "src/types";
 import { providerAuthError, providerSyncError } from "./notice";
 
 enum Status {
@@ -14,12 +14,14 @@ enum Status {
 
 export interface PluginSettings {
 	providerName: ProviderName | undefined;
-	cloudVaultPath: string | undefined;
+	providerPath: ProviderPath | undefined;
+	providerPathDisplay: ClientPath | undefined;
 }
 
 export const DEFAULT_SETTINGS: Partial<PluginSettings> = {
 	providerName: undefined,
-	cloudVaultPath: undefined,
+	providerPath: undefined,
+	providerPathDisplay: undefined,
 };
 
 export class SettingsTab extends PluginSettingTab {
@@ -62,7 +64,8 @@ export class SettingsTab extends PluginSettingTab {
 			localStorage.removeItem("dropboxRefreshToken");
 			this.status = Status.DISCONNECTED;
 			this.plugin.settings.providerName = undefined;
-			this.plugin.settings.cloudVaultPath = undefined;
+			this.plugin.settings.providerPath = undefined;
+			this.plugin.settings.providerPathDisplay = undefined;
 			this.display();
 		});
 
@@ -132,12 +135,20 @@ export class SettingsTab extends PluginSettingTab {
 					});
 					if (!this.provider) return;
 
-					const authUrl = await this.provider.getAuthenticationUrl();
-					const codeVerifier = this.provider.getCodeVerifier();
+					try {
+						const authUrl =
+							await this.provider.getAuthenticationUrl();
+						const codeVerifier = this.provider.getCodeVerifier();
 
-					window.sessionStorage.clear();
-					window.sessionStorage.setItem("codeVerifier", codeVerifier);
-					window.location.href = authUrl as string;
+						window.sessionStorage.clear();
+						window.sessionStorage.setItem(
+							"codeVerifier",
+							codeVerifier,
+						);
+						window.location.href = authUrl;
+					} catch (e) {
+						providerAuthError(e);
+					}
 				});
 			});
 
@@ -184,7 +195,7 @@ export class SettingsTab extends PluginSettingTab {
 			.setDesc("Select a folder in your Dropbox to sync with Obsidian")
 			.addText((text) =>
 				text
-					.setValue(this.plugin.settings.cloudVaultPath || "")
+					.setValue(this.plugin.settings.providerPathDisplay || "")
 					.setDisabled(true),
 			)
 			.addButton((button) =>
