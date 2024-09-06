@@ -1,5 +1,7 @@
 import { ClientPath, ProviderPath } from "./types";
 
+// TODO: improve function name - move from remote to provider?
+// change params to be more generic, works for foldrs and files
 export function sanitizeRemotePath(args: {
 	vaultRoot?: string;
 	filePath: string;

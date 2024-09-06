@@ -99,7 +99,7 @@ export default class VaultLink extends Plugin {
 				try {
 					await this.fileSync.initializeFileMap();
 					await this.fileSync.syncRemoteFiles();
-					await this.fileSync.syncClientFiles();
+					await this.fileSync.syncClientFoldersAndFiles();
 				} catch (e) {
 					providerSyncError(e);
 				}
@@ -111,7 +111,7 @@ export default class VaultLink extends Plugin {
 			try {
 				await this.fileSync.initializeFileMap();
 				await this.fileSync.syncRemoteFiles();
-				await this.fileSync.syncClientFiles();
+				await this.fileSync.syncClientFoldersAndFiles();
 				this.registerPluginIntervals();
 				this.registerPluginEventHandlers();
 			} catch (e) {

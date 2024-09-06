@@ -85,20 +85,47 @@ export class FileSync {
 		}
 	}
 
-	public async syncClientFiles(): Promise<void> {
+	public async syncClientFoldersAndFiles(): Promise<void> {
 		if (!this.fileMap) {
 			throw new Error("Sync Error: fileMap not initialized");
 		}
 
-		const files: TFile[] = [];
-		for (let fileData of this.fileMap.values()) {
-			if (fileData.rev) continue;
+		const foldersAndFiles = this.obsidianApp.vault.getAllLoadedFiles();
 
-			const file = this.obsidianApp.vault.getFileByPath(fileData.path);
-			if (!file) continue;
+		const folders = foldersAndFiles
+			.filter(
+				(folderOrFile): folderOrFile is TFolder =>
+					folderOrFile instanceof TFolder,
+			)
+			.map((folder) => {
+				return sanitizeRemotePath({
+					vaultRoot: this.settings.providerPath,
+					filePath: folder.path,
+				});
+			});
 
-			files.push(file);
-		}
+		const files = foldersAndFiles.filter(
+			(folderOrFile): folderOrFile is TFile => {
+				if (!(foldersAndFiles instanceof TFile)) return false;
+
+				const providerPath = sanitizeRemotePath({
+					vaultRoot: this.settings.providerPath,
+					filePath: folderOrFile.path,
+				});
+
+				// TODO: improve typeing so don't have to use !
+				return this.fileMap!.get(providerPath)!.rev == undefined;
+			},
+		);
+		// let files: TFile[] = [];
+		// for (let fileData of this.fileMap.values()) {
+		// 	if (fileData.rev) continue;
+		//
+		// 	const file = this.obsidianApp.vault.getFileByPath(fileData.path);
+		// 	if (!file) continue;
+		//
+		// 	files.push(file);
+		// }
 
 		const fileContents = await Promise.allSettled(
 			files.map((file) => this.obsidianApp.vault.readBinary(file)),
@@ -106,28 +133,32 @@ export class FileSync {
 
 		if (!files.length) return;
 
-		const { hasFailure } = await this.provider.processBatchCreateFile(
-			fileContents.reduce<
-				{ path: ProviderPath; contents: ArrayBuffer }[]
-			>((acc, cur, idx) => {
-				if (cur.status == "rejected") {
-					obsidianFileRetrievalError(files[idx].name);
-				} else {
-					const sanitizedRemotePath = sanitizeRemotePath({
-						vaultRoot: this.settings.providerPath,
-						filePath: files[idx].path,
-					});
-					acc.push({
-						path: sanitizedRemotePath,
-						contents: cur.value,
-					});
-				}
-				return acc;
-			}, []),
-		);
+		const { hasFailure: fileHasFailure } =
+			await this.provider.processBatchCreateFile(
+				fileContents.reduce<
+					{ path: ProviderPath; contents: ArrayBuffer }[]
+				>((acc, cur, idx) => {
+					if (cur.status == "rejected") {
+						obsidianFileRetrievalError(files[idx].name);
+					} else {
+						const sanitizedRemotePath = sanitizeRemotePath({
+							vaultRoot: this.settings.providerPath,
+							filePath: files[idx].path,
+						});
+						acc.push({
+							path: sanitizedRemotePath,
+							contents: cur.value,
+						});
+					}
+					return acc;
+				}, []),
+			);
+
+		const { hasFailure: folderHasFailure } =
+			await this.provider.processBatchCreateFolder({ paths: folders });
 
 		// TODO: Improve error messaging
-		if (hasFailure) {
+		if (fileHasFailure || folderHasFailure) {
 			providerSyncError();
 		}
 	}
