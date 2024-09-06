@@ -1,8 +1,7 @@
 import { Dropbox, DropboxAuth, DropboxResponse, files } from "dropbox";
 import { dropboxContentHasher } from "./dropbox.hasher";
 import { exponentialBackoff } from "src/utils";
-import type { Folder, ProviderPath } from "../types";
-// TODO: simplify - doesn't need to be so specific
+import type { ProviderPath } from "../types";
 import type {
 	FileHash,
 	ListFoldersAndFilesArgs,
@@ -24,24 +23,15 @@ type DropboxState = {
 	account: ProviderAccount;
 };
 
-export interface FileMetadataExtended extends files.FileMetadata {
-	fileBlob?: Blob;
-}
-const BATCH_DELAY_TIME = 500;
+const BATCH_DELAY_TIME = 250;
+const MAX_RETRY = 10;
+const GROWTH_FACTOR = 2;
 
 export const REDIRECT_URI = "obsidian://connect-dropbox";
 export const CLIENT_ID = "vofawt4jgywrgey";
 
-export const DROPBOX_PROVIDER_ERRORS = {
-	authenticationError: "Auth Error: Unable to authenticate with dropbox",
-	revocationError: "Revokeation Error: Unable to revoke dropbox token",
-	resourceAccessError:
-		"Resource Access Error: Unable to access Drpobox resource",
-};
-
 let instance: DropboxProvider | undefined;
 
-// @ts-ignore
 export class DropboxProvider implements Provider {
 	dropbox: Dropbox;
 	dropboxAuth: DropboxAuth;
@@ -329,9 +319,9 @@ export class DropboxProvider implements Provider {
 	>({
 		func: this._batchCreateFolderCheck.bind(this),
 		checkFunc: this._batchCreateFolderCheckIsSuccess.bind(this),
-		interval: 250,
-		maxRetry: 10,
-		growthFactor: 2,
+		interval: BATCH_DELAY_TIME,
+		maxRetry: MAX_RETRY,
+		growthFactor: GROWTH_FACTOR,
 	});
 
 	private _batchCreateFolderCheck(args: {
@@ -409,9 +399,9 @@ export class DropboxProvider implements Provider {
 	>({
 		func: this._batchMoveFolderOrFileCheck.bind(this),
 		checkFunc: this._batchMoveFolderOrFileCheckIsSuccess.bind(this),
-		interval: 250,
-		maxRetry: 10,
-		growthFactor: 2,
+		interval: BATCH_DELAY_TIME,
+		maxRetry: MAX_RETRY,
+		growthFactor: GROWTH_FACTOR,
 	});
 
 	private _batchMoveFolderOrFileCheck(args: {
@@ -487,9 +477,9 @@ export class DropboxProvider implements Provider {
 	>({
 		func: this._batchDeleteFolderOrFileCheck.bind(this),
 		checkFunc: this._batchDeleteFolderOrFileCheckIsSuccess.bind(this),
-		interval: 250,
-		maxRetry: 10,
-		growthFactor: 2,
+		interval: BATCH_DELAY_TIME,
+		maxRetry: MAX_RETRY,
+		growthFactor: GROWTH_FACTOR,
 	});
 
 	private _batchDeleteFolderOrFileCheck(args: {
@@ -674,18 +664,13 @@ export class DropboxProvider implements Provider {
 		};
 	}
 
-	setUserInfo(): Promise<void> {
-		return this.dropbox
-			.usersGetCurrentAccount()
-			.then((response) => {
-				this.state.account = {
-					accountId: response.result.account_id,
-					email: response.result.email,
-				};
-			})
-			.catch((_e: any) => {
-				throw new Error(DROPBOX_PROVIDER_ERRORS.resourceAccessError);
-			});
+	public async setUserInfo(): Promise<void> {
+		const userInfo = await this.dropbox.usersGetCurrentAccount();
+
+		this.state.account = {
+			accountId: userInfo.result.account_id,
+			email: userInfo.result.email,
+		};
 	}
 
 	public async updateFile(args: {

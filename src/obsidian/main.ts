@@ -16,9 +16,8 @@ import type { PluginSettings } from "./settings";
 const LONGPOLL_FREQUENCY = 30000;
 
 export default class VaultLink extends Plugin {
-	private fileSync: FileSync;
 	public settings: PluginSettings;
-
+	private fileSync: FileSync;
 	private longpollIntervalId: number | undefined;
 	private handleCreateEventRef: EventRef | undefined;
 	private handleModifyEventRef: EventRef | undefined;
@@ -36,17 +35,16 @@ export default class VaultLink extends Plugin {
 		// - reading the eventual localstorage provider property
 		// - set when the client selects the provider
 		// and then be seta as a more general name - provider
-		const dropboxProvider = new DropboxProvider();
+		const provider = new DropboxProvider();
 
 		this.fileSync = new FileSync({
 			obsidianApp: this.app,
 			settings: this.settings,
-			provider: dropboxProvider,
+			provider: provider,
 		});
 		/** END SETUP CLOUD PROVIDERS **/
 
 		/** PROVIDER AUTHENTICATIN`**/
-		// Set  protocol handler to catch authorization response form dropbox
 		this.registerObsidianProtocolHandler(
 			"connect-dropbox",
 			// TODO: Extract function
@@ -63,15 +61,17 @@ export default class VaultLink extends Plugin {
 					return;
 				}
 
-				dropboxProvider.setCodeVerifier(codeVerifier);
-				dropboxProvider
+				provider.setCodeVerifier(codeVerifier);
+				provider
 					.setAccessAndRefreshToken(protocolData.code)
 					.then(({ refreshToken }) => {
 						localStorage.setItem(
 							"dropboxRefreshToken",
 							refreshToken,
 						);
-						dropboxProvider.setUserInfo();
+						return provider.setUserInfo();
+					})
+					.then(() => {
 						pubsub.publish(PubsubTopic.AUTHORIZATION_SUCCESS);
 					})
 					.catch((_e) => {
@@ -136,15 +136,14 @@ export default class VaultLink extends Plugin {
 		// Automatically authenticate from refresh token
 		if (refreshToken) {
 			try {
-				dropboxProvider.authorizeWithRefreshToken(refreshToken);
-				await dropboxProvider.setUserInfo();
+				provider.authorizeWithRefreshToken(refreshToken);
+				await provider.setUserInfo();
 				pubsub.publish(PubsubTopic.AUTHORIZATION_SUCCESS);
 			} catch (e) {
 				pubsub.publish(PubsubTopic.AUTHORIZATION_FAILURE);
 			}
 		}
 
-		// Add Settings Tab For Plugin
 		this.addSettingTab(settingsTab);
 	}
 
@@ -237,7 +236,9 @@ export default class VaultLink extends Plugin {
 		}
 	}
 
-	onunload() {}
+	onunload() {
+		// TODO: Remove all local storage data
+	}
 
 	async loadSettings() {
 		this.settings = Object.assign(
