@@ -1,5 +1,6 @@
 import { StrictMode, useState, useEffect } from "react";
-import { Folder, ProviderPath, PubsubTopic } from "src/types";
+import { ProviderFolderResult } from "src/providers/types";
+import { ProviderPath, PubsubTopic } from "src/types";
 import { PubSub } from "../../lib/pubsub";
 import { DropboxProvider } from "../providers/dropbox.provider";
 import { useSelectVault } from "./useSelectVault";
@@ -203,7 +204,7 @@ export const TextLink: React.FC<TextLinkProps> = ({ children, ...props }) => {
 
 interface FolderListProps {
 	isLoading: boolean;
-	folders: Folder[];
+	folders: ProviderFolderResult[];
 	handleSelectFolder: (folderName: string) => void;
 }
 
