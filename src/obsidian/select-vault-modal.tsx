@@ -16,7 +16,7 @@ export class SelectVaultModal extends Modal {
 	}
 
 	async onOpen() {
-		this.contentEl.style.height = "35vh";
+		//this.contentEl.style.height = "35vh";
 		const rootElm = this.contentEl.createEl("div");
 		rootElm.id = "react-root";
 
