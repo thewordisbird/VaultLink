@@ -7,126 +7,36 @@ If your plugin does not need CSS, delete this file.
 
 */
 
-/*
-.theme-dark {
-	--dropbox_core_primary: #f7f5f2;
-	--dropbox_inverse_core_secondary: #1e1919;
-	--dropbox_inverse_core_accent: #3984ff;
+.modal {
+	overflow: hidden;
+	padding: var(--size-4-4) 0;
 }
 
-.theme-light {
-	--dropbox_core_primary: #1e1919;
-	--dropbox_core_secondary: #f7f5f2;
-	--dropbox_core_accent: #0061fe;
+.modal-title {
+	padding: 0 var(--size-4-4);
 }
 
-*/
-.settings_section {
+.modal-breadcrumbs-container {
+	padding: 0 var(--size-4-4) var(--size-4-2) var(--size-4-4);
+	border-bottom: 1px solid var(--background-secondary);
 	display: flex;
-	flex-direction: column;
-	justify-content: center;
-	align-items: center;
-	border-bottom: 1px solid;
-	width: 100%;
-	height: 96px;
-}
-
-button.dropbox_button {
-	background-color: #3984ff;
-	color: #1e1919;
-	font-size: 16px;
-	line-height: 20px;
-	font-weight: 600;
-	border-radius: 0;
-
-	&:hover {
-		opacity: 0.8;
-	}
-}
-
-.disconnect_container {
-}
-
-.dropbox_user_label {
-	font-size: 16px;
-	line-height: 20px;
-	font-weight: 600;
-	color: #f7f5f2;
-}
-
-.control-container {
-	display: flex;
-	flex-direction: row;
 	justify-content: space-between;
 	align-items: center;
 }
 
-.control-btn-container {
+.breadcrumb-clickable {
+	text-decoration: underline;
+	cursor: pointer;
+}
+
+.modal-results {
+	padding-left: var(--size-4-4);
+}
+
+.modal-controls {
+	padding: var(--size-4-4) var(--size-4-4) 0 var(--size-4-4);
 	display: flex;
-	flex-direction: row;
 	justify-content: flex-end;
-	gap: 8px;
-}
-
-.display-slash {
-	padding: var(--size-2-2);
-}
-
-button.btn-text-link {
-	--interactive-normal: none;
-	--input-shadow: none;
-
-	padding: 0;
-
-	&:hover {
-		--interactive-hover: none;
-		--input-shadow-hover: none;
-		text-decoration: underline;
-	}
-}
-
-.folder-current-location {
-	width: 100%;
-	display: flex;
-	align-items: center;
-	flex-direction: row;
-}
-
-.add-folder-form {
-	display: flex;
-	flex-grow: 1;
-	flex-direction: row;
-	justify-content: space-between;
-	padding: var(--size-2-2);
-	& input {
-		flex-grow: 1;
-	}
-}
-
-.add-folder-form-control {
-	& button:first-child {
-		margin-left: var(--size-4-4);
-		margin-right: var(--size-4-2);
-	}
-}
-
-.folder-select-table {
-	overflowy: auto;
-	width: 100%;
-	& tr,
-	td {
-		margin: 0;
-		padding: 0;
-	}
-
-	& tr.table-alt-row {
-		background-color: var(--background-primary-alt);
-	}
-
-	& tr:hover {
-		background-color: var(--background-modifier-hover);
-	}
-	& tr:active {
-		background-color: var(--background-modifier-active-hover);
-	}
+	gap: var(--size-4-2);
+	border-top: 1px solid var(--background-secondary);
 }

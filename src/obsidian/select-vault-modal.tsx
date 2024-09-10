@@ -20,23 +20,34 @@ export class SelectVaultModal extends Modal {
 		});
 		this.providerVaultPath =
 			this.plugin.settings.providerPath || ("/" as ProviderPath);
+		this.contentEl.remove();
 	}
 
 	async onOpen() {
-		const { contentEl } = this;
+		const { modalEl } = this;
 		this.setTitle("Select vault");
 
-		const breadCrumbsEl = contentEl.createEl("div");
-		const addFolderEl = contentEl.createEl("div");
-		const resultsEl = contentEl.createEl("div");
-		const controlsEl = contentEl.createEl("div");
+		const breadcrumbsContainerEl = modalEl.createEl("div");
+		breadcrumbsContainerEl.addClass("modal-breadcrumbs-container");
 
-		this.renderBreadCrumbs(breadCrumbsEl, resultsEl);
+		const resultsEl = modalEl.createEl("div");
+		resultsEl.addClass("modal-results");
+
+		const controlsEl = modalEl.createEl("div");
+		controlsEl.addClass("modal-controls");
+
+		resultsEl.setAttrs({
+			style: "overflow-y: auto; height: 100% ",
+		});
+
+		// resultsEl.setAttribute("style", "overflow-y: auto");
+		// resultsEl.setAttribute("style", "height: 100%");
+		this.renderBreadCrumbs(breadcrumbsContainerEl, resultsEl);
 		const folders = await this.getResults();
 
-		this.renderResults(folders, breadCrumbsEl, resultsEl);
+		this.renderResults(folders, breadcrumbsContainerEl, resultsEl);
 
-		this.renderControls(controlsEl, addFolderEl, breadCrumbsEl, resultsEl);
+		this.renderControls(controlsEl);
 	}
 
 	async getResults(): Promise<ProviderFolderResult[]> {
@@ -66,6 +77,7 @@ export class SelectVaultModal extends Modal {
 		resultsEl: HTMLElement,
 	) {
 		resultsEl.empty();
+		resultsEl.setAttribute("style", "overflow-y:auto");
 		for (let folder of folders) {
 			let resultEl = resultsEl.createEl("div");
 			resultEl.setText(folder.name);
@@ -79,33 +91,51 @@ export class SelectVaultModal extends Modal {
 		}
 	}
 
-	renderBreadCrumbs(breadcumbsEl: HTMLElement, resultsEl: HTMLElement) {
-		breadcumbsEl.empty();
+	renderBreadCrumbs(
+		breadcrumbsContainerEl: HTMLElement,
+		resultsEl: HTMLElement,
+	) {
+		breadcrumbsContainerEl.empty();
 
-		let span = breadcumbsEl.createEl("span");
-		span.setText("All folders");
-		span.onClickEvent(async () => {
-			this.onSelectResult("/" as ProviderPath, breadcumbsEl, resultsEl);
+		const breadcrumbsEl = breadcrumbsContainerEl.createEl("div");
+		breadcrumbsEl.addClass("modal-breadcrumbs");
+
+		const addFolderBtn = breadcrumbsContainerEl.createEl("button");
+		addFolderBtn.addClass("modal-add-folder-btn");
+		addFolderBtn.setText("Add folder");
+		addFolderBtn.onClickEvent(() => {});
+
+		// const addFolderEl = breadcrumbsContainerEl.createEl("div");
+		// addFolderEl.addClass("modal-add-folder-form");
+
+		let rootSpan = breadcrumbsEl.createEl("span");
+
+		rootSpan.setText("All folders");
+		rootSpan.onClickEvent(async () => {
+			this.onSelectResult("/" as ProviderPath, breadcrumbsEl, resultsEl);
 		});
 
 		if (this.providerVaultPath.length > 1) {
-			console.log("path:", this.providerVaultPath);
-			const clientPath = this.providerVaultPath.slice(0);
-			console.log("clientPath:", clientPath);
+			rootSpan.addClass("breadcrumb-clickable");
 			this.providerVaultPath
 				.slice(1)
 				.split("/")
 				.map((cur, idx, arr) => {
-					console.log("arr:", arr);
-					breadcumbsEl.createEl("span").setText(" / ");
-					let span = breadcumbsEl.createEl("span");
+					console.log("cur, idx,  arr:", cur, idx, arr);
+					breadcrumbsEl.createEl("span").setText(" / ");
+					let span = breadcrumbsEl.createEl("span");
 
 					span.setText(cur);
 					if (idx < arr.length - 1) {
+						console.log("Not Last Item");
+						span.addClass("breadcrumb-clickable");
 						span.onClickEvent(async () => {
 							this.onSelectResult(
-								arr.slice(0, idx + 1).join("/") as ProviderPath,
-								breadcumbsEl,
+								("/" +
+									arr
+										.slice(0, idx + 1)
+										.join("/")) as ProviderPath,
+								breadcrumbsContainerEl,
 								resultsEl,
 							);
 						});
@@ -114,27 +144,15 @@ export class SelectVaultModal extends Modal {
 		}
 	}
 
-	renderControls(
-		controlsEl: HTMLElement,
-		addFolderEl: HTMLElement,
-		breadcrumbsEl: HTMLElement,
-		resultsEl: HTMLElement,
-	) {
+	renderControls(controlsEl: HTMLElement) {
 		const selectVaultBtn = controlsEl.createEl("button");
 		selectVaultBtn.setText("Select vault");
+		selectVaultBtn.addClass("mod-cta");
 		selectVaultBtn.onClickEvent(() => {
 			this.pubsub.publish(PubsubTopic.SET_VAULT_PATH, {
 				payload: this.providerVaultPath,
 			});
 			this.close();
-		});
-
-		const addFolderBtn = controlsEl.createEl("button");
-		addFolderBtn.setText("Add folder");
-		addFolderBtn.onClickEvent(() => {
-			this.renderAddFolderInput(addFolderEl, breadcrumbsEl, resultsEl);
-			selectVaultBtn.disabled = true;
-			addFolderBtn.disabled = true;
 		});
 	}
 
