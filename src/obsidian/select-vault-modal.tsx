@@ -18,7 +18,6 @@ export class SelectVaultModal extends Modal {
 		this.provider = getProvider({
 			providerName: this.plugin.settings.providerName!,
 		});
-		console.log("constructor path:", this.plugin.settings.providerPath);
 		this.providerVaultPath =
 			this.plugin.settings.providerPath || ("/" as ProviderPath);
 	}
@@ -39,6 +38,7 @@ export class SelectVaultModal extends Modal {
 
 		this.renderControls(controlsEl, addFolderEl, breadCrumbsEl, resultsEl);
 	}
+
 	async getResults(): Promise<ProviderFolderResult[]> {
 		const queryPath =
 			this.providerVaultPath == "/"
@@ -54,7 +54,6 @@ export class SelectVaultModal extends Modal {
 		breadcrumbEl: HTMLElement,
 		resultsEl: HTMLElement,
 	) {
-		console.log("onSelectResult - path:", path);
 		this.providerVaultPath = path;
 		const folders = await this.getResults();
 		this.renderBreadCrumbs(breadcrumbEl, resultsEl);
@@ -70,6 +69,10 @@ export class SelectVaultModal extends Modal {
 		for (let folder of folders) {
 			let resultEl = resultsEl.createEl("div");
 			resultEl.setText(folder.name);
+			resultEl.className = "suggestion-item mod-complex";
+			resultEl.onmouseover = () => resultEl.addClass("is-selected");
+			resultEl.onmouseout = () => resultEl.removeClass("is-selected");
+
 			resultEl.onClickEvent(async () => {
 				this.onSelectResult(folder.path, breadcrumbsEl, resultsEl);
 			});
