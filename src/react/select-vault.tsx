@@ -217,25 +217,38 @@ const FolderList: React.FC<FolderListProps> = ({
 	if (!folders.length) return <h3>No sub-folders</h3>;
 
 	return (
-		<div style={{ overflowY: "auto", height: "225px" }}>
-			<table className="folder-select-table">
-				<tbody>
-					{folders.map((folder, idx) => (
-						<tr
-							className={`table-row ${idx % 2 == 0 ? "table-alt-row" : ""}`}
-							key={folder.path}
-						>
-							<td
-								onClick={() => handleSelectFolder(folder.name!)}
-							>
-								{folder.name!}
-							</td>
-						</tr>
-					))}
-				</tbody>
-			</table>
+		<div>
+			{folders.map((folder) => (
+				<div className="prompt-results">
+					<div className="suggestion-item mod-complex">
+						<div className="suggestion-content">
+							<div>
+								<span className="suggestion-highlight">
+									{folder.name}
+								</span>
+							</div>
+						</div>
+					</div>
+				</div>
+			))}
 		</div>
 	);
+	// return (
+	// 	<table className="folder-select-table">
+	// 		<tbody>
+	// 			{folders.map((folder, idx) => (
+	// 				<tr
+	// 					className={`table-row ${idx % 2 == 0 ? "table-alt-row" : ""}`}
+	// 					key={folder.path}
+	// 				>
+	// 					<td onClick={() => handleSelectFolder(folder.name!)}>
+	// 						{folder.name!}
+	// 					</td>
+	// 				</tr>
+	// 			))}
+	// 		</tbody>
+	// 	</table>
+	// );
 };
 
 export default SelectVault;

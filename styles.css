@@ -7,6 +7,7 @@ If your plugin does not need CSS, delete this file.
 
 */
 
+/*
 .theme-dark {
 	--dropbox_core_primary: #f7f5f2;
 	--dropbox_inverse_core_secondary: #1e1919;
@@ -19,6 +20,7 @@ If your plugin does not need CSS, delete this file.
 	--dropbox_core_accent: #0061fe;
 }
 
+*/
 .settings_section {
 	display: flex;
 	flex-direction: column;
@@ -109,6 +111,7 @@ button.btn-text-link {
 }
 
 .folder-select-table {
+	overflowy: auto;
 	width: 100%;
 	& tr,
 	td {

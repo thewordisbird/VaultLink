@@ -1,4 +1,4 @@
-import { App, Setting, PluginSettingTab, Notice } from "obsidian";
+import { App, Setting, PluginSettingTab } from "obsidian";
 import { PubSub } from "../../lib/pubsub";
 import VaultLink from "./main";
 import { SelectVaultModal } from "./select-vault-modal";
@@ -41,8 +41,7 @@ export class SettingsTab extends PluginSettingTab {
 		this.status = Status.DISCONNECTED;
 		// This sets the value to the first item in the list. Must update if changing order.
 		// TODO: Look into more dynamic way to do this.
-		this.providerName =
-			this.plugin.settings.providerName || ProviderName.DROPBOX;
+		this.providerName = this.plugin.settings.providerName || "dropbox";
 		this.provider = getProvider({ providerName: this.providerName });
 
 		// Register pubsub subscriptions
@@ -74,6 +73,7 @@ export class SettingsTab extends PluginSettingTab {
 			(args: { payload: string }) => {
 				const { payload } = args;
 
+				console.log("SVP payload:", payload);
 				const vaultPathInput = document.getElementById(
 					"vault_path_input",
 				) as HTMLInputElement;
@@ -113,9 +113,9 @@ export class SettingsTab extends PluginSettingTab {
 		new Setting(disconnectedEl)
 			.setName("Provider")
 			.addDropdown((dropdown) => {
-				dropdown.addOption(ProviderName.DROPBOX, ProviderName.DROPBOX);
+				dropdown.addOption("dropbox", "dropbox");
 				// This is the first options that is already populated
-				dropdown.setValue(ProviderName.DROPBOX);
+				dropdown.setValue("dropbox");
 				dropdown.onChange((value) => {
 					this.providerName = value as ProviderName;
 				});
