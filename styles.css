@@ -59,3 +59,7 @@ If your plugin does not need CSS, delete this file.
 	gap: var(--size-4-2);
 	border-top: 1px solid var(--background-secondary);
 }
+
+.empty-result {
+	font-size: var(--font-ui-large);
+}

@@ -73,6 +73,11 @@ export class SelectVaultModal extends Modal {
 		this.resultsEl.empty();
 		this.resultsEl.addClass("modal-results");
 
+		if (folders.length == 0) {
+			const emptyResultEl = this.resultsEl.createEl("div");
+			emptyResultEl.addClass("empty-result");
+			emptyResultEl.setText("This folder is empty");
+		}
 		for (let folder of folders) {
 			const resultEl = this.resultsEl.createEl("div");
 			resultEl.setText(folder.name);
