@@ -8,6 +8,8 @@ If your plugin does not need CSS, delete this file.
 */
 
 .modal {
+	position: absolute:
+	top: 80px;
 	overflow: hidden;
 	padding: var(--size-4-4) 0;
 }
@@ -20,7 +22,27 @@ If your plugin does not need CSS, delete this file.
 	padding: 0 var(--size-4-4) var(--size-4-2) var(--size-4-4);
 	border-bottom: 1px solid var(--background-secondary);
 	display: flex;
+	flex-direction: column;
+}
+
+.breadcrumbs-control-container {
+	display: flex;
 	justify-content: space-between;
+	align-items: center;
+	gap: var(--size-2-1);
+}
+
+.add-folder-form-container {
+	display: flex;
+	justify-content: space-between;
+	flex-grow: 1;
+	align-items: center;
+}
+
+.add-folder-form-control-container {
+	display: flex;
+	gap: var(--size-4-2);
+	justify-content: flex-end;
 	align-items: center;
 }
 

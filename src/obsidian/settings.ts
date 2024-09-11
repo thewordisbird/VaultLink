@@ -199,7 +199,7 @@ export class SettingsTab extends PluginSettingTab {
 					.setDisabled(true),
 			)
 			.addButton((button) =>
-				button.setButtonText("Select Folder").onClick(() => {
+				button.setButtonText("Select Vault").onClick(() => {
 					new SelectVaultModal(this.app, this.plugin).open();
 				}),
 			)

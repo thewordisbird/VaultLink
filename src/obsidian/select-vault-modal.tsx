@@ -40,8 +40,6 @@ export class SelectVaultModal extends Modal {
 			style: "overflow-y: auto; height: 100% ",
 		});
 
-		// resultsEl.setAttribute("style", "overflow-y: auto");
-		// resultsEl.setAttribute("style", "height: 100%");
 		this.renderBreadCrumbs(breadcrumbsContainerEl, resultsEl);
 		const folders = await this.getResults();
 
@@ -97,22 +95,71 @@ export class SelectVaultModal extends Modal {
 	) {
 		breadcrumbsContainerEl.empty();
 
-		const breadcrumbsEl = breadcrumbsContainerEl.createEl("div");
+		const breadcrumbsControlContainer =
+			breadcrumbsContainerEl.createEl("div");
+		breadcrumbsControlContainer.addClass("breadcrumbs-control-container");
+
+		const breadcrumbsEl = breadcrumbsControlContainer.createEl("div");
 		breadcrumbsEl.addClass("modal-breadcrumbs");
 
-		const addFolderBtn = breadcrumbsContainerEl.createEl("button");
+		const addFolderBtn = breadcrumbsControlContainer.createEl("button");
 		addFolderBtn.addClass("modal-add-folder-btn");
 		addFolderBtn.setText("Add folder");
-		addFolderBtn.onClickEvent(() => {});
+		addFolderBtn.onClickEvent(handleShowAddFolderForm);
 
-		// const addFolderEl = breadcrumbsContainerEl.createEl("div");
-		// addFolderEl.addClass("modal-add-folder-form");
+		const addFolderFormContainer =
+			breadcrumbsControlContainer.createEl("div");
+		addFolderFormContainer.addClass("add-folder-form-container");
+		addFolderFormContainer.hide();
+
+		const addFolderFormInputLabel =
+			addFolderFormContainer.createEl("label");
+		addFolderFormInputLabel.addClass("add-folder-form-input-label");
+		addFolderFormInputLabel.setText(" / ");
+		const addFolderFormInput = addFolderFormInputLabel.createEl("input");
+		addFolderFormInput.addClass("add-folder-form-input");
+
+		const addFolderFormControlContainer =
+			addFolderFormContainer.createEl("div");
+		addFolderFormControlContainer.addClass(
+			"add-folder-form-control-container",
+		);
+
+		const addFolderFormCancelBtn =
+			addFolderFormControlContainer.createEl("button");
+		addFolderFormCancelBtn.setText("Cancel");
+		addFolderFormCancelBtn.onClickEvent(handleShowAddFolderBtn);
+
+		const addFolderFormSaveBtn =
+			addFolderFormControlContainer.createEl("button");
+		addFolderFormSaveBtn.setText("Save");
+		addFolderFormSaveBtn.addClass("mod-cta");
+		addFolderFormSaveBtn.onClickEvent(async () => {
+			const newPath = (this.providerVaultPath +
+				"/" +
+				addFolderFormInput.value) as ProviderPath;
+			await this.provider.processBatchCreateFolder({ paths: [newPath] });
+			this.onSelectResult(newPath, breadcrumbsContainerEl, resultsEl);
+		});
+		function handleShowAddFolderForm() {
+			addFolderFormContainer.show();
+			addFolderBtn.hide();
+		}
+
+		function handleShowAddFolderBtn() {
+			addFolderFormContainer.hide();
+			addFolderBtn.show();
+		}
 
 		let rootSpan = breadcrumbsEl.createEl("span");
 
 		rootSpan.setText("All folders");
 		rootSpan.onClickEvent(async () => {
-			this.onSelectResult("/" as ProviderPath, breadcrumbsEl, resultsEl);
+			this.onSelectResult(
+				"/" as ProviderPath,
+				breadcrumbsContainerEl,
+				resultsEl,
+			);
 		});
 
 		if (this.providerVaultPath.length > 1) {
@@ -156,31 +203,27 @@ export class SelectVaultModal extends Modal {
 		});
 	}
 
-	renderAddFolderInput(
-		addFolderEl: HTMLElement,
-		breadcrumbEl: HTMLElement,
-		resultsEl: HTMLElement,
-	) {
-		const input = addFolderEl.createEl("input", "type=text");
-
-		const saveBtn = addFolderEl.createEl("button");
-		saveBtn.setText("Save");
-		saveBtn.onClickEvent(async () => {
-			const newPath = (this.providerVaultPath +
-				"/" +
-				input.value) as ProviderPath;
-			await this.provider.processBatchCreateFolder({ paths: [newPath] });
-			this.onSelectResult(newPath, breadcrumbEl, resultsEl);
-		});
-
-		const cancelBtn = addFolderEl.createEl("button");
-		cancelBtn.setText("Cancel");
-		cancelBtn.onClickEvent(() => {
-			addFolderEl.empty();
-
-			// TODO: enable buttons when addFolder is closed
-		});
-	}
+	// renderAddFolderForm(addFolderFormContainerEl: HTMLElement) {
+	// 	const input = addFolderEl.createEl("input", "type=text");
+	//
+	// 	const saveBtn = addFolderEl.createEl("button");
+	// 	saveBtn.setText("Save");
+	// 	saveBtn.onClickEvent(async () => {
+	// 		const newPath = (this.providerVaultPath +
+	// 			"/" +
+	// 			input.value) as ProviderPath;
+	// 		await this.provider.processBatchCreateFolder({ paths: [newPath] });
+	// 		this.onSelectResult(newPath, breadcrumbEl, resultsEl);
+	// 	});
+	//
+	// 	const cancelBtn = addFolderEl.createEl("button");
+	// 	cancelBtn.setText("Cancel");
+	// 	cancelBtn.onClickEvent(() => {
+	// 		addFolderEl.empty();
+	//
+	// 		// TODO: enable buttons when addFolder is closed
+	// 	});
+	// }
 
 	async onClose() {}
 }
