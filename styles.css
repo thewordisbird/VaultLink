@@ -22,11 +22,6 @@ If your plugin does not need CSS, delete this file.
 	padding: 0 var(--size-4-4) var(--size-4-2) var(--size-4-4);
 	border-bottom: 1px solid var(--background-secondary);
 	display: flex;
-	flex-direction: column;
-}
-
-.breadcrumbs-control-container {
-	display: flex;
 	justify-content: space-between;
 	align-items: center;
 	gap: var(--size-2-1);
@@ -53,6 +48,8 @@ If your plugin does not need CSS, delete this file.
 
 .modal-results {
 	padding-left: var(--size-4-4);
+	overflow-y: auto;
+	height: 100%;
 }
 
 .modal-controls {
