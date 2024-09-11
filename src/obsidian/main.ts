@@ -85,8 +85,9 @@ export default class VaultLink extends Plugin {
 			async (args: { payload: string }) => {
 				const { payload } = args;
 
-				const providerPath = ("/" + payload) as ProviderPath;
-				const providerPathDisplay = payload as ClientPath;
+				console.log("PAYLOAD:", payload);
+				const providerPath = payload as ProviderPath;
+				const providerPathDisplay = payload.slice(1) as ClientPath;
 
 				if (this.settings.providerPath == providerPath) return;
 
