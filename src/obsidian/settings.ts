@@ -1,7 +1,7 @@
 import { App, Setting, PluginSettingTab } from "obsidian";
 import { PubSub } from "../../lib/pubsub";
 import VaultLink from "./main";
-import { SelectVaultModal } from "./select-vault-modal";
+import { SelectVaultModal } from "./modal";
 import { getProvider, ProviderName } from "../providers/provider";
 import { Provider } from "src/providers/types";
 import { ClientPath, ProviderPath, PubsubTopic } from "src/types";
