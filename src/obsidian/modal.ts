@@ -102,7 +102,7 @@ export class SelectVaultModal extends Modal {
 
 		const addFolderBtn = this.breadcrumbsContainerEl.createEl("button");
 		addFolderBtn.setText("Add folder");
-		addFolderBtn.onClickEvent(handleShowAddFolderForm);
+		addFolderBtn.onClickEvent(handleShowAddFolderForm.bind(this));
 
 		const addFolderFormContainer =
 			this.breadcrumbsContainerEl.createEl("div");
@@ -124,7 +124,7 @@ export class SelectVaultModal extends Modal {
 		const addFolderFormCancelBtn =
 			addFolderFormControlContainer.createEl("button");
 		addFolderFormCancelBtn.setText("Cancel");
-		addFolderFormCancelBtn.onClickEvent(handleShowAddFolderBtn);
+		addFolderFormCancelBtn.onClickEvent(handleShowAddFolderBtn.bind(this));
 
 		const addFolderFormSaveBtn =
 			addFolderFormControlContainer.createEl("button");
@@ -149,11 +149,13 @@ export class SelectVaultModal extends Modal {
 		function handleShowAddFolderForm() {
 			addFolderFormContainer.show();
 			addFolderBtn.hide();
+			this.renderControls(true);
 		}
 
 		function handleShowAddFolderBtn() {
 			addFolderFormContainer.hide();
 			addFolderBtn.show();
+			this.renderControls(false);
 		}
 
 		const rootSpan = breadcrumbsEl.createEl("span");
@@ -188,13 +190,14 @@ export class SelectVaultModal extends Modal {
 		}
 	}
 
-	renderControls() {
-		this.contentEl.empty();
+	renderControls(disabled = false) {
+		this.controlsEl.empty();
 		this.controlsEl.addClass("modal-controls");
 
 		const selectVaultBtn = this.controlsEl.createEl("button");
 		selectVaultBtn.setText("Select vault");
 		selectVaultBtn.addClass("mod-cta");
+		selectVaultBtn.disabled = disabled;
 		selectVaultBtn.onClickEvent(() => {
 			this.pubsub.publish(PubsubTopic.SET_VAULT_PATH, {
 				payload: this.providerVaultPath,
