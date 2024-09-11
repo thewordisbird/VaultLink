@@ -7,6 +7,14 @@ export function providerSyncError(details = "") {
 	);
 }
 
+export function poroviderCreateFolderError(details = "") {
+	new Notice(`Provider Create Folder Error: ${details}\n\nPlease try again.`);
+}
+
+export function providerListFolderError(details = "") {
+	new Notice(`Provider List Folder Error: ${details}\n\nPlease try again.`);
+}
+
 export function providerLongpollError(details = "") {
 	new Notice(
 		`Provider Longpoll Error: ${details}\n\nPlease manual sync to attempt to resolve issue.`,

@@ -4,6 +4,7 @@ import { PubSub } from "../../lib/pubsub";
 import { Provider, ProviderFolderResult } from "../providers/types";
 import { getProvider } from "../providers/provider";
 import { ProviderPath, PubsubTopic } from "src/types";
+import { poroviderCreateFolderError, providerListFolderError } from "./notice";
 
 export class SelectVaultModal extends Modal {
 	plugin: VaultLink;
@@ -33,10 +34,16 @@ export class SelectVaultModal extends Modal {
 		this.resultsEl = this.modalEl.createEl("div");
 		this.controlsEl = this.modalEl.createEl("div");
 
-		const folders = await this.getResults();
-		this.renderBreadCrumbs();
-		this.renderResults(folders);
-		this.renderControls();
+		let folders: ProviderFolderResult[] = [];
+		try {
+			folders = await this.getResults();
+		} catch (e) {
+			providerListFolderError(e);
+		} finally {
+			this.renderBreadCrumbs();
+			this.renderResults(folders);
+			this.renderControls();
+		}
 	}
 
 	async getResults(): Promise<ProviderFolderResult[]> {
@@ -51,9 +58,15 @@ export class SelectVaultModal extends Modal {
 
 	async onSelectResult(path: ProviderPath) {
 		this.providerVaultPath = path;
-		const folders = await this.getResults();
-		this.renderBreadCrumbs();
-		this.renderResults(folders);
+		let folders: ProviderFolderResult[] = [];
+		try {
+			folders = await this.getResults();
+		} catch (e) {
+			providerListFolderError(e);
+		} finally {
+			this.renderBreadCrumbs();
+			this.renderResults(folders);
+		}
 	}
 
 	renderResults(folders: ProviderFolderResult[]) {
@@ -113,12 +126,19 @@ export class SelectVaultModal extends Modal {
 		addFolderFormSaveBtn.setText("Save");
 		addFolderFormSaveBtn.addClass("mod-cta");
 		addFolderFormSaveBtn.onClickEvent(async () => {
+			if (addFolderFormInput.value == "") return;
 			const newPath = (this.providerVaultPath +
 				"/" +
 				addFolderFormInput.value) as ProviderPath;
 
-			await this.provider.processBatchCreateFolder({ paths: [newPath] });
-			this.onSelectResult(newPath);
+			try {
+				await this.provider.processBatchCreateFolder({
+					paths: [newPath],
+				});
+				this.onSelectResult(newPath);
+			} catch (e) {
+				poroviderCreateFolderError(e);
+			}
 		});
 
 		function handleShowAddFolderForm() {
